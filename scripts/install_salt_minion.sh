@@ -1,6 +1,6 @@
 #!/bin/bash
 
-HOSTNAME=${1:-autoserver}
+HOSTNAME=${1:-hqslice}
 SALT_MASTER=${2:-127.0.0.1}
 ENV=${3:-development}
 
@@ -35,6 +35,7 @@ master: saltmaster
 id: $HOSTNAME
 grains:
   environment: $ENV
+  update_aufs: False
 startup_states: highstate  
 """ > /etc/salt/minion
 

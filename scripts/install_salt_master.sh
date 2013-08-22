@@ -2,6 +2,10 @@
 
 ENV=${1:-development}
 
+if [ -d "/etc/salt" ]; then
+  exit
+fi
+
 echo "------> Bootstrapping master for environment $ENV"
 
 __apt_get_noinput() {
@@ -36,11 +40,11 @@ worker_threads: 3
 
 file_roots:
   base:
-    - /srv/diggerhq/salt
+    - /srv/quarry/salt
 
 pillar_roots:
   base:
-    - /srv/diggerhq/pillar
+    - /srv/quarry/pillar
 
 peer:
   .*:
@@ -61,8 +65,12 @@ id: saltmaster
 
 grains:
   environment: $ENV
+  update_aufs: False
 
 log_file: /var/log/salt/minion
 log_level: info
 log_level_logfile: garbage
 """ > /etc/salt/minion
+
+service salt-master restart
+service salt-minion restart
