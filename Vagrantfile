@@ -94,7 +94,7 @@ Vagrant.configure("2") do |config|
     #
     # this installs ansible as well as other core development packages
 
-    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /srv/quarry && make all"
+    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /srv/quarry && make install"
 
   end  
 

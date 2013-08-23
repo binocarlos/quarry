@@ -1,6 +1,6 @@
 #!/bin/bash
 
-HOSTNAME=${1:-hqslice}
+HOSTNAME=${1:-saltmaster}
 SALT_MASTER=${2:-127.0.0.1}
 ENV=${3:-development}
 
@@ -36,7 +36,7 @@ id: $HOSTNAME
 grains:
   environment: $ENV
   update_aufs: False
-startup_states: highstate  
+startup_states: highstate
 """ > /etc/salt/minion
 
 salt-call -g >> /dev/null 2>&1 &

@@ -1,5 +1,0 @@
----
-- hosts: vagrant
-  tasks:
-  - name: get free memory
-    command: free
