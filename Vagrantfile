@@ -9,11 +9,8 @@
 #
 # it is perfect for a local developer to work on a single application
 
-#BOX_NAME = ENV['BOX_NAME'] || "precise64"
-#BOX_URI = ENV['BOX_URI'] || "https://s3-us-west-2.amazonaws.com/squishy.vagrant-boxes/precise64_squishy_2013-02-09.box"
-
-BOX_NAME = ENV["BOX_NAME"] || "raring"
-BOX_URI = ENV["BOX_URI"] || "https://cloud-images.ubuntu.com/vagrant/raring/current/raring-server-cloudimg-amd64-vagrant-disk1.box"
+BOX_NAME = ENV['BOX_NAME'] || "precise64"
+BOX_URI = ENV['BOX_URI'] || "https://s3-us-west-2.amazonaws.com/squishy.vagrant-boxes/precise64_squishy_2013-02-09.box"
 
 Vagrant.configure("2") do |config|
 
@@ -67,6 +64,8 @@ Vagrant.configure("2") do |config|
         "echo ''; " \
         "echo '-----------------------------------------------------------------------'; " \
         "echo 'Installation of VBox Guest Additions is proceeding in the background.'; " \
+        "echo ''; " \
+        "echo 'Wait for this command to finish and then type:'; " \
         "echo '-----------------------------------------------------------------------'; " \
         "echo ''; " \
         "echo 'type:'; " \
@@ -74,7 +73,7 @@ Vagrant.configure("2") do |config|
         "echo '   vagrant reload'; " \
         "echo ''; " \
         "echo '-----------------------------------------------------------------------'; " \
-        "echo 'in about 2 minutes to restart vagrant and activate the new guest additions.'; " \
+        "echo 'and the installation will continue.'; " \
         "echo '-----------------------------------------------------------------------'; "
     end
     # Activate new kernel
@@ -95,7 +94,13 @@ Vagrant.configure("2") do |config|
     #
     # this installs ansible as well as other core development packages
 
-    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /vagrant && make vagrant"
+    pkg_cmd = "apt-get update -qq; apt-get install -q -y python-software-properties; " \
+
+    
+    pkg_cmd << "apt-get install -q -y linux-headers-3.8.0-19-generic dkms; " \
+        "echo 'Downloading VBox Guest Additions...'; " \
+        "wget -q http://dlc.sun.com.edgesuite.net/virtualbox/4.2.12/VBoxGuestAdditions_4.2.12.iso; "
+    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /vagrant && make install"
 
   end  
 

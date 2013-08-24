@@ -20,7 +20,8 @@ salt-cloud:
       - pip: apache_libcloud
 
 # loop the cloud providers and include them in the salt-cloud folders
-{% for name, provider in pillar.cloud.iteritems() %}
+{% set cloud=pillar.cloud or [] %}
+{% for name in cloud %}
 
 salt-cloud-provider-{{ name }}:
   file.managed:

@@ -1,9 +1,9 @@
 # new cloud servers booted with 3.8 have this done
 # the development vagrant setup does this itself
 docker-update-kernel:
-  pkg:
-    - installed
-    - name: linux-image-extra-{{ salt['cmd.run']('uname -r') }}
+  cmd.run:
+    - name: apt-get install -y linux-image-extra-`uname -r`
+    - unless: lsmod | grep aufs || modprobe aufs
 
 lxc-docker:
   pkgrepo:
@@ -16,4 +16,4 @@ lxc-docker:
     - name: lxc-docker
     - refresh: True
     - require:
-      - pkg: docker-update-kernel
+      - cmd: docker-update-kernel

@@ -2,20 +2,23 @@ ENV ?= development
 
 install: dependencies
 
-# used to symlink /vagrant/salt and /vagrant/pillar to /srv/quarry/salt and /srv/quarry/pillar
-vagrant: dependencies
-
 dependencies: salt-master salt-minion
 
 salt-master:
 	@echo "installing salt master"
 	sh scripts/install_salt_master.sh
+	service salt-master restart
 
 salt-minion:
 	@echo "installing salt minion"
 	sh scripts/install_salt_minion.sh
 	service salt-minion restart
-	
+	sleep 5
+	salt-key -y -A
+
+#aufs:
+#	lsmod | grep aufs || modprobe aufs || apt-get install -y linux-image-extra-`uname -r`
+
 # used for cleaning up the dockmaster setup of docker images
 clean:
 	docker rm `docker ps -a -q`

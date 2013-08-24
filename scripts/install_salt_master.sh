@@ -46,6 +46,9 @@ pillar_roots:
   base:
     - /srv/quarry/pillar
 
+ext_pillar:
+  - cmd_yaml: test -f /etc/quarry/pillar && cat /etc/quarry/pillar
+
 peer:
   .*:
     - network.ip_addrs
@@ -70,6 +73,3 @@ log_file: /var/log/salt/minion
 log_level: info
 log_level_logfile: garbage
 """ > /etc/salt/minion
-
-service salt-master restart
-service salt-minion restart
