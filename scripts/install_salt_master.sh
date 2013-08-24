@@ -65,7 +65,6 @@ id: saltmaster
 
 grains:
   environment: $ENV
-  update_aufs: False
 
 log_file: /var/log/salt/minion
 log_level: info

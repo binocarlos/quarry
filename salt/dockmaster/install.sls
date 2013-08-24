@@ -4,6 +4,8 @@ include:
 {{ pillar.prefix }}/dockmaster:
   file.directory:
     - makedirs: True
+    - require:
+      - pkg: lxc-docker
 
 {{ pillar.prefix }}/dockmaster/buildimage.sh:
   file.managed:

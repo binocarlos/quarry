@@ -39,7 +39,6 @@ master: saltmaster
 id: $HOSTNAME
 grains:
   environment: $ENV
-  update_aufs: False
 startup_states: highstate
 """ > /etc/salt/minion
 

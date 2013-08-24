@@ -14,7 +14,6 @@ salt-master:
 salt-minion:
 	@echo "installing salt minion"
 	sh scripts/install_salt_minion.sh
-	wait 5
 	service salt-minion restart
 	
 # used for cleaning up the dockmaster setup of docker images
