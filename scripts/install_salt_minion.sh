@@ -4,6 +4,10 @@ HOSTNAME=${1:-saltmaster}
 SALT_MASTER=${2:-127.0.0.1}
 ENV=${3:-development}
 
+if [ -f "/etc/salt/minion" ]; then
+  exit
+fi
+
 echo "------> Bootstrapping minion $HOSTNAME (master: $SALT_MASTER) for environment $ENV"
 
 __apt_get_noinput() {

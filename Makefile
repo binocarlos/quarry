@@ -1,7 +1,9 @@
 ENV ?= development
 
 install: dependencies
-	@echo "installing quarry"
+
+# used to symlink /vagrant/salt and /vagrant/pillar to /srv/quarry/salt and /srv/quarry/pillar
+vagrant: dependencies
 
 dependencies: salt-master salt-minion
 
@@ -15,6 +17,11 @@ salt-minion:
 	wait 5
 	service salt-minion restart
 	
+# used for cleaning up the dockmaster setup of docker images
+clean:
+	docker rm `docker ps -a -q`
+	docker rmi `docker images | grep quarry/ | awk '!/ID/ {print $3}' | sort`
+	rm -rf /srv/deployquarry
 
 #gitreceive:
 #	wget -qO /usr/local/bin/gitreceive ${GITRECEIVE_URL}

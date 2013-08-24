@@ -5,6 +5,7 @@ basepackages:
   - git
   - make
   - curl
+prefix: /srv/deployquarry
 users:
   quarry:
     

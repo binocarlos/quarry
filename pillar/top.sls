@@ -1,8 +1,11 @@
 base:
+  # everyone gets settings.sls
   '*':
-    - settings
+    - all
+  # we load up the cloud api keys for the master
   'saltmaster':
     - cloud
+  # env settings
   'environment:development':
     - match: grain
     - development

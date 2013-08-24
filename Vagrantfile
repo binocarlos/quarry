@@ -9,8 +9,11 @@
 #
 # it is perfect for a local developer to work on a single application
 
-BOX_NAME = ENV['BOX_NAME'] || "precise64"
-BOX_URI = ENV['BOX_URI'] || "https://s3-us-west-2.amazonaws.com/squishy.vagrant-boxes/precise64_squishy_2013-02-09.box"
+#BOX_NAME = ENV['BOX_NAME'] || "precise64"
+#BOX_URI = ENV['BOX_URI'] || "https://s3-us-west-2.amazonaws.com/squishy.vagrant-boxes/precise64_squishy_2013-02-09.box"
+
+BOX_NAME = ENV["BOX_NAME"] || "raring"
+BOX_URI = ENV["BOX_URI"] || "https://cloud-images.ubuntu.com/vagrant/raring/current/raring-server-cloudimg-amd64-vagrant-disk1.box"
 
 Vagrant.configure("2") do |config|
 
@@ -27,11 +30,9 @@ Vagrant.configure("2") do |config|
   ## expose the main master web port
   config.vm.network :forwarded_port, guest: 80, host: 8080
 
-  ## mount this repo onto /srv/quarry
-  config.vm.synced_folder "./", "/srv/quarry"
-
-  ## mount the folder above this repo as /srv/projects - this is for development purposes
+  ## mount the folder above this repo as /srv/projects - this means we can develop from this folder
   config.vm.synced_folder "../", "/srv/projects"
+  config.vm.synced_folder "./", "/srv/quarry"
 
   ####################################################################################
   ####################################################################################
@@ -94,7 +95,7 @@ Vagrant.configure("2") do |config|
     #
     # this installs ansible as well as other core development packages
 
-    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /srv/quarry && make install"
+    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /vagrant && make vagrant"
 
   end  
 
