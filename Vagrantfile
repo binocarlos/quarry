@@ -65,16 +65,10 @@ Vagrant.configure("2") do |config|
         "echo '-----------------------------------------------------------------------'; " \
         "echo 'Installation of VBox Guest Additions is proceeding in the background.'; " \
         "echo ''; " \
-        "echo 'Wait for this command to finish and then type:'; " \
+        "echo 'Wait for this command to finish - make a cup of tea (i.e. wait 2 mins) and then type:'; " \
         "echo '-----------------------------------------------------------------------'; " \
-        "echo ''; " \
-        "echo 'type:'; " \
         "echo ''; " \
         "echo '   vagrant reload'; " \
-        "echo ''; " \
-        "echo '-----------------------------------------------------------------------'; " \
-        "echo 'and the installation will continue.'; " \
-        "echo '-----------------------------------------------------------------------'; "
     end
     # Activate new kernel
     pkg_cmd << "shutdown -r +1; "
@@ -90,17 +84,9 @@ Vagrant.configure("2") do |config|
     ##############################################################
     ##############################################################
     ##############################################################
-    # run the basic provisioning script
-    #
-    # this installs ansible as well as other core development packages
+    # run the provisioning script
 
-    pkg_cmd = "apt-get update -qq; apt-get install -q -y python-software-properties; " \
-
-    
-    pkg_cmd << "apt-get install -q -y linux-headers-3.8.0-19-generic dkms; " \
-        "echo 'Downloading VBox Guest Additions...'; " \
-        "wget -q http://dlc.sun.com.edgesuite.net/virtualbox/4.2.12/VBoxGuestAdditions_4.2.12.iso; "
-    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /vagrant && make install"
+    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /vagrant && echo 'DONE'"
 
   end  
 
