@@ -21,9 +21,13 @@ function install_image {
 }
 
 # make sure the Dockerfiles are downloaded
-if [ ! -d ~/quarryfiles ]; then
+if [ ! -d ~/quarryfiles ]
+then
 	echo "cloning images repo"
 	cd ~ && git clone $QUARRYFILES_URL	
+else
+	echo "pull images repo"
+	cd ~/quarryfiles && git pull
 fi
 
 case "$1" in

@@ -9,51 +9,27 @@ A docker based runtime environment for [digger](https://github.com/binocarlos/di
 
 ## usage
 
-make a new folder for an app
+	$ cd <project_root>
+	$ quarry build
+	$ quarry run
 
-	$ mkdir /srv/myapp && cd /srv/myapp
+### building
 
-initialize a new quarry/digger application
+We must turn the digger.yaml file into a set of DockerFiles to run the stack.
 
-	$ quarry init .
+We do this inside a 'quarry/builder' container.
 
-run a digger/quarry application
+VOLUME / 
 
-	$ quarry run .
+	<project_root> -> /home/quarry_project
 
-this will run the app by default in development mode which is all services in one container.
+And then we run
 
-## background
+This is use the quarry/buyil
 
-quarry is a command-line tool that has the following jobs:
 
- * to launch digger applications from their digger.yml files
- * to allocate docker servers for each role to be launched on
- * to know what services the digger.yml contains
- * to export connection details to services in environment
 
-## applications
 
-Are folders containing digger.yml and code.
 
-Each application is named after the github repo - e.g.
-
-	binocarlos/mycoolapp
-
-Once the .yml is parsed - we know what of the following are needed:
-
- * websites (express node.js app)
- * reception (core router)
- * switchboard (pub/sub server)
- * warehouses (generic javascript with $digger connection)
- * services (log-lived network services - redis - mongo)
-
-We create a .quarry folder in the code repository
-
-.quarry should be in .gitignore
-
-## usage
-
-Once you have installed, quarry is a command line application.
 
 
