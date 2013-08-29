@@ -1,0 +1,15 @@
+#!/bin/bash
+export QUARRYFILES_URL=${QUARRYFILES_URL:-https://github.com/binocarlos/quarryfiles}
+# check that we have docker installed
+#test -n `docker version` || echo "docker must be installed" 1>&2 && exit;
+docker version >/dev/null 2>&1 || { echo >&2 "I require docker but it's not installed.  Aborting."; exit 1; }
+
+# make sure the Dockerfiles are downloaded
+if [ ! -d ~/quarryfiles ]
+then
+	echo "cloning images repo"
+	cd ~ && git clone $QUARRYFILES_URL	
+else
+	echo "pull images repo"
+	cd ~/quarryfiles && git pull
+fi
