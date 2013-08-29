@@ -19,17 +19,17 @@ We must turn the digger.yaml file into a set of DockerFiles to run the stack.
 
 We do this inside a 'quarry/builder' container.
 
-VOLUME / 
+VOLUME /quarryapp
 
 	<project_root> -> /home/quarry_project
 
 And then we run
 
-This is use the quarry/buyil
 
 
 
 
 
+$ cat ~/.ssh/id_rsa.pub | ssh progriumapp.com "sudo gitreceive upload-key progrium"
 
 

@@ -2,6 +2,7 @@ GITRECEIVE_URL ?= https://raw.github.com/progrium/gitreceive/master/gitreceive
 SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
 PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
 FIREWALL_REPO ?= https://github.com/bmaeser/iptables-boilerplate.git
+QUARRYFILES_REPO ?= https://github.com/binocarlos/quarryfiles.git
 
 PWD := $(shell pwd)
 
@@ -26,11 +27,12 @@ uninstall:
 	rm -rf /usr/local/bin/quarry
 	rm -rf /home/git/receiver
 	rm -rf /var/lib/quarry/plugins
+	rm -rf ~/quarryfiles
 
 plugins: pluginhook docker
 	quarry plugins-install
 
-dependencies: gitreceive sshcommand pluginhook firewall docker
+dependencies: firewall gitreceive sshcommand pluginhook docker quarryfiles
 
 gitreceive:
 	wget -qO /usr/local/bin/gitreceive ${GITRECEIVE_URL}
@@ -46,6 +48,10 @@ pluginhook:
 	wget -qO /tmp/pluginhook_0.1.0_amd64.deb ${PLUGINHOOK_URL}
 	dpkg -i /tmp/pluginhook_0.1.0_amd64.deb
 
+quarryfiles:
+	test -d ~/quarryfiles || git clone ${QUARRYFILES_REPO} ~/quarryfiles
+	cd ~/quarryfiles && chmod a+x builddockerfile && sudo make all
+
 firewall:
 	mkdir -p /etc/firewall
 	mkdir -p /etc/firewall/custom
@@ -57,6 +63,8 @@ firewall:
 	# create a backup of the firewall rules and allow 22 and 80 and 443 through
 	cp /etc/firewall/services.conf /etc/firewall/services.default.conf
 	cat /etc/firewall/services.default.conf | sed -r 's/#((80|443)\/(tcp|udp))/\1/' > /etc/firewall/services.conf
+	cp /etc/firewall/firewall.conf /etc/firewall/firewall.default.conf
+	cat /etc/firewall/firewall.default.conf | sed -r 's/ipv4_forwarding=false/ipv4_forwarding=true/' > /etc/firewall/firewall.conf
 	service firewall restart
 
 docker: aufs
@@ -71,7 +79,3 @@ docker: aufs
 
 aufs:
 	lsmod | grep aufs || modprobe aufs || apt-get install -y linux-image-extra-`uname -r`
-
-# checks to see if we have built the quarry images - otherwise trigger the build script
-build:
-	@docker images | grep quarry/ || quarry buildall
