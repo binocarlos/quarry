@@ -6,21 +6,17 @@ QUARRYFILES_REPO ?= https://github.com/binocarlos/quarryfiles.git
 
 PWD := $(shell pwd)
 
-all: dependencies install plugins build
-
-link:
-	ln -s $(PWD)/quarry /usr/local/bin/quarry
+all: dependencies install plugins
 
 install:
-	# fake install that symlinks to here
-	test -f /usr/local/bin/quarry || ln -s quarry /usr/local/bin/quarry
-	test -f /home/git/receiver || ln -s receiver /home/git/receiver
-	# where the plugins live
-	mkdir -p /var/lib/quarry
-	# where the uploaded apps live
-	mkdir -p /home/quarry
-	@#cp -r plugins/* /var/lib/quarry/plugins
-	test -d /var/lib/quarry/plugins || ln -s plugins /var/lib/quarry/plugins
+	cp -f quarry /usr/local/bin/quarry
+	cp receiver /home/git/receiver
+	mkdir -p /var/lib/quarry/plugins
+	cp -r plugins/* /var/lib/quarry/plugins
+
+quarryfiles:
+	cd ~ && test -d quarryfiles || git clone ${QUARRYFILES_REPO}
+	cd ~/quarryfiles && make all
 
 uninstall:
 	quarry cleanup
@@ -32,7 +28,7 @@ uninstall:
 plugins: pluginhook docker
 	quarry plugins-install
 
-dependencies: firewall gitreceive sshcommand pluginhook docker quarryfiles
+dependencies: firewall gitreceive sshcommand pluginhook docker
 
 gitreceive:
 	wget -qO /usr/local/bin/gitreceive ${GITRECEIVE_URL}
@@ -48,14 +44,25 @@ pluginhook:
 	wget -qO /tmp/pluginhook_0.1.0_amd64.deb ${PLUGINHOOK_URL}
 	dpkg -i /tmp/pluginhook_0.1.0_amd64.deb
 
-quarryfiles:
-	test -d ~/quarryfiles || git clone ${QUARRYFILES_REPO} ~/quarryfiles
-	cd ~/quarryfiles && chmod a+x builddockerfile && sudo make all
+docker: aufs
+	egrep -i "^docker" /etc/group || groupadd docker
+	usermod -aG docker git
+	usermod -aG docker quarry
+	curl https://get.docker.io/gpg | apt-key add -
+	echo deb https://get.docker.io/ubuntu docker main > /etc/apt/sources.list.d/docker.list
+	apt-get update
+	apt-get install -y lxc-docker 
+	sleep 2 # give docker a moment i guess
 
+aufs:
+	lsmod | grep aufs || modprobe aufs || apt-get install -y linux-image-extra-`uname -r`
+
+# the firewall so we can expose ports amoungst containers but not worry about public access to them
+# 22, 80 and 443 are let through
 firewall:
 	mkdir -p /etc/firewall
 	mkdir -p /etc/firewall/custom
-	cd ~ && test -d iptables-boilerplate || git clone $FIREWALL_REPO
+	cd ~ && test -d iptables-boilerplate || git clone ${FIREWALL_REPO}
 	cp ~/iptables-boilerplate/firewall /etc/init.d/firewall
 	cp ~/iptables-boilerplate/etc/firewall/*.conf /etc/firewall
 	chmod 755 /etc/init.d/firewall
@@ -66,16 +73,3 @@ firewall:
 	cp /etc/firewall/firewall.conf /etc/firewall/firewall.default.conf
 	cat /etc/firewall/firewall.default.conf | sed -r 's/ipv4_forwarding=false/ipv4_forwarding=true/' > /etc/firewall/firewall.conf
 	service firewall restart
-
-docker: aufs
-	egrep -i "^docker" /etc/group || groupadd docker
-	usermod -aG docker git
-	usermod -aG docker quarry
-	curl http://get.docker.io/gpg | apt-key add -
-	echo deb https://get.docker.io/ubuntu docker main > /etc/apt/sources.list.d/docker.list
-	apt-get update
-	apt-get install -y lxc-docker
-	sleep 2 # give docker a moment i guess
-
-aufs:
-	lsmod | grep aufs || modprobe aufs || apt-get install -y linux-image-extra-`uname -r`
