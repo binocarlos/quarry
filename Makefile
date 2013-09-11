@@ -13,6 +13,7 @@ install:
 	cp receiver /home/git/receiver
 	mkdir -p /var/lib/quarry/plugins
 	cp -r plugins/* /var/lib/quarry/plugins
+	quarry install
 
 quarryfiles:
 	cd ~ && test -d quarryfiles || git clone ${QUARRYFILES_REPO}
@@ -48,6 +49,7 @@ docker: aufs
 	egrep -i "^docker" /etc/group || groupadd docker
 	usermod -aG docker git
 	usermod -aG docker quarry
+	usermod -aG docker vagrant
 	curl https://get.docker.io/gpg | apt-key add -
 	echo deb https://get.docker.io/ubuntu docker main > /etc/apt/sources.list.d/docker.list
 	apt-get update
