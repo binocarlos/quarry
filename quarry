@@ -449,7 +449,7 @@ run echo "$DEPLOYID" > /tmp/quarrydeploy
 add . /srv/quarryapp
 
 # install the npm modules
-#run cd /srv/quarryapp && rm -rf node_modules && NODE_ENV=production npm install
+run cd /srv/quarryapp && rm -rf node_modules && NODE_ENV=production npm install
 EOF
 
     DEPLOY_IMAGE="$APP_NAME/$DEPLOYID"
