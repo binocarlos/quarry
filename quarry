@@ -95,7 +95,7 @@ function ensure_root(){
 }
 
 function random_id(){
-  RANDOMID=`tr -dc "[0-9]" < /dev/urandom | head -c 8`
+  RANDOMID=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1`  
 }
 
 # generate a random, unused port
@@ -440,7 +440,7 @@ function prepare_app_image(){
 
     # make an image out of the app
     cat<<EOF > $APP_FOLDER/Dockerfile
-from quarry/digger
+from quarrystack/digger
 
 # this clears the docker cach
 run echo "$DEPLOYID" > /tmp/quarrydeploy
@@ -712,8 +712,8 @@ case "$1" in
     cat | tar -xC $APP_FOLDER
 
     
-    echo "-----> Installing $APP ..."
-    quarry run
+    echo "-----> Running $APP ..."
+    run_app
     #echo "-----> Build complete!"
     #echo "-----> Releasing $APP ..."
     #dokku release $APP $IMAGE
@@ -827,16 +827,7 @@ case "$1" in
   # if passed a folder then that is what we are running
   # otherwise we assume the current folder is the app
   run)
-    # this is the full path to the app folder
-    # if empty then the current working folder
-    APP_FOLDER="$2"
-
-    # the deploy id either from git or manual
-    DEPLOYID="$3"
-
-    # are we running development mode where we mount a volume of the codebase so they can change it
-    DEPLOY_MODE='production'
-
+  
     run_app
 
     ;;
