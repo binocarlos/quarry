@@ -9,9 +9,7 @@ A docker based runtime environment for [digger](https://github.com/binocarlos/di
 
 ## usage
 
-	$ cd <project_root>
-	$ quarry build
-	$ quarry run
+	$ cat ~/.ssh/id_rsa.pub | ssh domain.com "sudo gitreceive upload-key user"
 
 ## applications
 

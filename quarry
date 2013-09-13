@@ -276,6 +276,8 @@ function build_app(){
   ## BUILD
 
   # digger app
+  echo "APP FOLDER: $APP_FOLDER"
+  
   if [[ -f "$APP_FOLDER/digger.yaml" ]]; then
     
     echo "compiling digger app $APP_NAME"
