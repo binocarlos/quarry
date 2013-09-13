@@ -31,14 +31,6 @@ function initialize_app(){
 
   APP_FOLDER=$1
 
-  # we only do this once
-  if [[ ! -z $APP_INITIALIZED ]]; then
-    return
-  fi
-
-  APP_INITIALIZED="1"
-
-
   # if we just run right off the bat then we are running from the current folder
   if [[ -z $APP_FOLDER ]]; then
     APP_FOLDER=`pwd`
@@ -277,7 +269,7 @@ function build_app(){
 
   # digger app
   echo "APP FOLDER: $APP_FOLDER"
-  
+
   if [[ -f "$APP_FOLDER/digger.yaml" ]]; then
     
     echo "compiling digger app $APP_NAME"
@@ -711,9 +703,9 @@ case "$1" in
 
     # fetch the git head to use as the deploy id
     DEPLOYID=$(cd ~/$APP && git rev-parse HEAD | cut -c -8);
-
+    APP_FOLDER="$QUARRY_APPS/$APP"
     echo "-----> Uploading $APP ..."
-    initialize_app "$QUARRY_APPS/$APP"
+    initialize_app
 
     # move the input (tar) into where we want it on the filesystem
     # this is run from a gitreceive
@@ -721,7 +713,7 @@ case "$1" in
 
     
     echo "-----> Installing $APP ..."
-    quarry run $APP $DEPLOYID production
+    quarry run
     #echo "-----> Build complete!"
     #echo "-----> Releasing $APP ..."
     #dokku release $APP $IMAGE
@@ -739,7 +731,6 @@ case "$1" in
 
   build)
     initialize_app
-
     echo "bulding"
     build_app
 
