@@ -193,7 +193,7 @@ function start_core_service(){
     else
       service_expose_port $servicename
       echo $EXPOSE_SERVICE_PORT
-      serviceid=$(docker run -d $EXPOSE_SERVICE_PORT -t quarry/$servicename)  
+      serviceid=$(docker run -d $EXPOSE_SERVICE_PORT -t quarrystack/$servicename)  
     fi
 
     container_ip $serviceid
@@ -276,7 +276,7 @@ function build_app(){
 
     # build the digger app into the .quarry folder - we can study the files after
     # the build is a read only because the files are root inside the container
-    docker run -a=stdout -v $APP_FOLDER:/srv/quarryapp -w /srv/quarryapp -t quarry/digger /usr/bin/digger build
+    docker run -a=stdout -v $APP_FOLDER:/srv/quarryapp -w /srv/quarryapp -t quarrystack/digger /usr/bin/digger build
           
   # we have a manual quarry layout - this is a node.js app but with services they have specified in a quarry layout
   elif [[ -d "$APP_FOLDER/.quarry" ]]; then
@@ -370,7 +370,7 @@ function boot_services(){
         # run the service container
         # write the container id to the $containerfile
         # mount a volume -> runtime/data/redis
-        containerid=$(docker run -d -v $datafolder:/data/db -t quarry/$servicename)
+        containerid=$(docker run -d -v $datafolder:/data/db -t quarrystack/$servicename)
 
         container_ip $containerid
     
