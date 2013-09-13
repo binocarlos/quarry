@@ -43,7 +43,7 @@ function initialize_app(){
   fi
 
   # the name of the app is the folder it is in
-  APP_NAME=$(echo $APP_FOLDER | awk -F/ '{print $(NF)}')
+  APP_NAME=$(echo $APP_FOLDER | awk -F/ '{print $(NF)}' | sed -r 's/-//')
 
   QUARRY_FOLDER="$APP_FOLDER/.quarry"
   RUNTIME_FOLDER="$QUARRY_FOLDER/runtime"
@@ -449,7 +449,8 @@ run echo "$DEPLOYID" > /tmp/quarrydeploy
 add . /srv/quarryapp
 
 # install the npm modules
-run cd /srv/quarryapp && rm -rf node_modules && NODE_ENV=production npm install
+run test -f /srv/quarryapp/package.json || echo '{}' > /srv/quarryapp/package.json
+run cd /srv/quarryapp && rm -rf /srv/quarryapp/node_modules && NODE_ENV=production npm install
 EOF
 
     DEPLOY_IMAGE="$APP_NAME/$DEPLOYID"
