@@ -7,6 +7,12 @@ export QUARRY_APPS=${QUARRY_APPS:="$HOME/.quarry/apps"}
 # where we keep the root settings (like for hipache)
 export QUARRY_HOME=${QUARRY_HOME:="/home/quarry"}
 
+# 128MB
+#export memorylimit=134217728
+# 64MB
+export memorylimit=67108864
+# 32MB
+#export memorylimit=33554432
 
 ########################################################################
 #
@@ -529,12 +535,7 @@ function run_app_container(){
   # make one string that has all of the env in one docker command string
   #get_env_string
 
-  # 128MB
-  #memorylimit=134217728
-  # 64MB
-  #memorylimit=67108864
-  # 32MB
-  memorylimit=33554432
+
 
   dockercommand="docker run -d -v $QUARRY_FOLDER/env:/srv/quarryapp/.quarry/env -w /srv/quarryapp -m $memorylimit -t $DEPLOY_IMAGE mon \"$BOOT_COMMAND\""
 
@@ -847,9 +848,10 @@ case "$1" in
 
     ;;
 
-  developer)
+  develop)
+    initialize_app
     DEPLOY_MODE='developer'
-    run_app
+    build_app
     ;;
 
   reset)
