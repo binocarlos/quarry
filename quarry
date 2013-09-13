@@ -8,7 +8,7 @@ export QUARRY_APPS=${QUARRY_APPS:="/home/git/apps"}
 export QUARRY_HOME=${QUARRY_HOME:="/home/quarry"}
 
 function random_id(){
-  RANDOMID=`tr -dc "[a-z0-9]" < /dev/urandom | head -c 8`
+  RANDOMID=`tr -dc "[0-9]" < /dev/urandom | head -c 8`
 }
 
 # generate a random, unused port
@@ -43,7 +43,7 @@ function service_port(){
 
 
 
-# run the hipache container so we can load balance HTTP
+# run the hipache container so we can load balance HTTP for different domains to various containers
 function run_hipache(){
   mkdir -p $QUARRY_HOME
 
@@ -79,22 +79,31 @@ function stop_hipache(){
   fi
 }
 
+# netcat a command to the hipache redis
+function hipache_command(){
+  rediscommand=$1
+  redishost=`cat $QUARRY_HOME/HIPACHE_HOST`
+  redisport=`cat $QUARRY_HOME/HIPACHE_PORT`
+  # pipe the command which waits a fraction of a second after netcatting the redis command
+  (echo -en "$rediscommand\r\n"; perl -e "select(undef,undef,undef,0.01);";) | nc $redishost $redisport > /dev/null 2>&1
+}
+
 # insert a domain into hipache
 function insert_hipache_route(){
   name=$1;
   domain=$2;
   host=$3;
   port=$4;
-  redishost=`cat $QUARRY_HOME/HIPACHE_HOST`
-  redisport=`cat $QUARRY_HOME/HIPACHE_PORT`
-  ### >/dev/null 2>&1
-  echo "$redishost:$redisport"
-  redis-cli -h $redishost -p $redisport del frontend:$domain >/dev/null 2>&1
-  redis-cli -h $redishost -p $redisport rpush frontend:$domain $name >/dev/null 2>&1
-  redis-cli -h $redishost -p $redisport rpush frontend:$domain http://$host:$port >/dev/null 2>&1
-  redis-cli -h $redishost -p $redisport del frontend:*.$domain >/dev/null 2>&1
-  redis-cli -h $redishost -p $redisport rpush frontend:*.$domain $name >/dev/null 2>&1
-  redis-cli -h $redishost -p $redisport rpush frontend:*.$domain http://$host:$port >/dev/null 2>&1
+  standardkey="frontend:$domain"
+  wildkey="frontend:*.$domain"
+  endpoint="http://$host:$port"
+
+  hipache_command "del $standardkey"
+  hipache_command "del $wildkey"
+  hipache_command "rpush $standardkey $name"
+  hipache_command "rpush $wildkey $name"
+  hipache_command "rpush $standardkey $endpoint"
+  hipache_command "rpush $wildkey $endpoint"
 }
 
 # get the vars and folders setup for one app
@@ -117,7 +126,7 @@ function initialize_app(){
   RUNTIME_FOLDER="$QUARRY_FOLDER/runtime"
   ENV_FOLDER="$QUARRY_FOLDER/env"
 
-  # we keep this seperate incase they are running inside a funky vm shared folder
+  # we keep this seperate incase they are running inside a funky vm shared folder vagrant style
   ROOT_DATA_FOLDER="$HOME/quarrydata";
 
   mkdir -p $RUNTIME_FOLDER
@@ -133,8 +142,12 @@ function initialize_app(){
   # we use hipache to route to here
   DOMAINS_FILE="$APP_FOLDER/domains"
 
+  if [[ ! -f $DOMAINS_FILE ]]; then
+    DOMAINS_FILE="$APP_FOLDER/.quarry/domains"
+  fi
+
   # how we will boot the app
-  BOOT_COMMAND="/usr/local/bin/node index.js"
+  BOOT_COMMAND="/usr/bin/node index.js"
 }
 
 
@@ -148,11 +161,10 @@ function build_app(){
   if [[ -f "$APP_FOLDER/digger.yaml" ]]; then
     
     echo "compiling digger app $APP_NAME"
-    MODE="digger"
 
     # build the digger app into the .quarry folder - we can study the files after
     # the build is a read only because the files are root inside the container
-    docker run -a=stdout -v $APP_FOLDER:/srv/quarryapp -w /srv/quarryapp -t quarry/digger /usr/local/bin/digger compile
+    docker run -a=stdout -v $APP_FOLDER:/srv/quarryapp -w /srv/quarryapp -t quarry/digger /usr/bin/digger build
           
   # we have a manual quarry layout - this is a node.js app but with services they have specified in a quarry layout
   elif [[ -d "$APP_FOLDER/.quarry" ]]; then
@@ -189,6 +201,12 @@ function build_app(){
   if [[ -f $QUARRY_FOLDER/bootstrap ]]; then
     BOOT_COMMAND=$(cat $QUARRY_FOLDER/bootstrap)
   fi
+
+  # we probably dont need the full paths but lets be sure
+  BOOT_COMMAND=`echo "$BOOT_COMMAND" | sed -r "s/^digger/\/usr\/bin\/digger -d \/srv\/quarryapp/"`
+  BOOT_COMMAND=`echo "$BOOT_COMMAND" | sed -r "s/^node/\/usr\/bin\/node/"`
+
+  echo $BOOT_COMMAND > $QUARRY_FOLDER/boot_command
 }
 
 #function stop_services(){
@@ -240,7 +258,7 @@ function boot_services(){
         # run the service container
         # write the container id to the $containerfile
         # mount a volume -> runtime/data/redis
-        containerid=$(docker run -d -v $datafolder:/data/db -p $SERVICE_PORT -t quarry/$servicename)
+        containerid=$(docker run -d -v $datafolder:/data/db -t quarry/$servicename)
 
         container_ip $containerid
     
@@ -319,6 +337,22 @@ EOF
   fi
 }
 
+function get_env_string(){
+
+  ENV_STRING=""
+  # we loop each of the services needed in the stack
+  for i in $QUARRY_FOLDER/env/* ; do
+
+    # each service represents itself as a file named after the service
+    if [ -f "$i" ]; then
+      envname=$(echo $i | awk -F/ '{print $(NF)}')
+      envvalue=$(cat $i)
+      ENV_STRING="$ENV_STRING -e=\"$envname=$envvalue\""
+    fi
+
+  done
+}
+
 
 function run_app_container(){
 
@@ -332,9 +366,7 @@ function run_app_container(){
   KILL_CONTAINER=""
   #ARRAY+=('foo')
 
-  # we probably dont need the full paths but lets be sure
-  BOOT_COMMAND=`echo "$BOOT_COMMAND" | sed -r "s/^digger/\/usr\/local\/bin\/digger -d \/srv\/quarryapp/"`
-  BOOT_COMMAND=`echo "$BOOT_COMMAND" | sed -r "s/^node/\/usr\/local\/bin\/node/"`
+  BOOT_COMMAND=$(cat $QUARRY_FOLDER/boot_command)
 
   echo ""
   echo "---------------------------------------------------"
@@ -348,9 +380,16 @@ function run_app_container(){
 
   appnodename="app"
 
+  imagefile=$RUNTIME_FOLDER/nodes/${appnodename^^}_IMAGE
   appcontainerfile=$RUNTIME_FOLDER/nodes/${appnodename^^}
   apphostfile=$RUNTIME_FOLDER/nodes/${appnodename^^}_HOST
   appportfile=$RUNTIME_FOLDER/nodes/${appnodename^^}_PORT
+
+  if [[ -z $DEPLOY_IMAGE ]]; then
+    if [[ -f $imagefile ]]; then
+      DEPLOY_IMAGE=$(cat $imagefile)
+    fi
+  fi
 
   appcontainerid=''
 
@@ -360,28 +399,76 @@ function run_app_container(){
     KILL_CONTAINER="$appcontainerid"
   fi
 
+  if [[ -f $apphostfile ]]; then
+    KILL_APP_HOST=$(cat $appcontainerfile)
+  fi
+
+  if [[ -f $appportfile ]]; then
+    KILL_APP_PORT=$(cat $appcontainerfile);
+  fi
+
   echo "running boot: $BOOT_COMMAND"
   echo "on container: $APP_NAME/$DEPLOYID"
 
-  # the boot step
-  appcontainerid=$(docker run -d -w /srv/quarryapp -p 80 -t $DEPLOY_IMAGE mon "$BOOT_COMMAND")
-  #dockernodeport=$(docker port $appcontainerid 80)
+  # make one string that has all of the env in one docker command string
+  #get_env_string
+
+  # 128MB
+  #memorylimit=134217728
+  # 64MB
+  #memorylimit=67108864
+  # 32MB
+  memorylimit=33554432
+
+  dockercommand="docker run -d -v $QUARRY_FOLDER/env:/srv/quarryapp/.quarry/env -w /srv/quarryapp -m $memorylimit -t $DEPLOY_IMAGE mon \"$BOOT_COMMAND\""
+
+  echo $bootcommand > "$QUARRY_FOLDER/dockercommand"
+
+  echo ""
+  echo "---------------------------------------------------"
+  echo ""
+  echo "$dockercommand"
+  echo ""
+  echo "---------------------------------------------------"
+  echo ""
+
+  appcontainerid=$(docker run -d -v $QUARRY_FOLDER/env:/srv/quarryapp/.quarry/env -w /srv/quarryapp -m $memorylimit -t $DEPLOY_IMAGE mon "$BOOT_COMMAND")
 
   # internal network
   container_ip $appcontainerid
 
-  dockernodeport=80
-  dockernodehost=$CONTAINER_IP
+  apphost=$CONTAINER_IP
+  appport=80
 
   # write the container id and port to the runtime
   echo $appcontainerid > $appcontainerfile
-  echo $dockernodehost > $apphostfile
-  echo $dockernodeport > $appportfile
+  echo $apphost > $apphostfile
+  echo $appport > $appportfile
+  echo $DEPLOY_IMAGE > $imagefile
 
+  echo ""
+  echo "--------------------------------------------"
+  echo ""
   echo "$APP_NAME is created:"
   echo "  * container:          $appcontainerid"
-  echo "  * host:               $dockernodehost"
-  echo "  * port:               $dockernodeport"
+  echo "  * host:               $apphost"
+  echo "  * port:               $appport"
+  echo ""
+  echo "--------------------------------------------"
+  echo ""
+
+  echo ""
+  echo "--------------------------------------------"
+  echo ""
+  echo "gwanin insert domain tings pon hipache innit"
+  echo ""
+  echo "--------------------------------------------"
+  echo ""
+  # read in the domains file and update hipache with the route
+  while read domain; do
+    echo "   domain: $domain"
+    insert_hipache_route "$APP_NAME" "$domain" "$apphost" "$appport"
+  done < $DOMAINS_FILE
 }
 
 function stop_app(){
@@ -419,49 +506,46 @@ function start_app(){
   initialize_app
   appnodename="app"
 
-  # we loop each of the services needed in the stack
-  for i in $QUARRY_FOLDER/services/* ; do
-
-    # each service represents itself as a file named after the service
-    if [ -f "$i" ]; then
-
-      # grab the name of the service off the end of the file -> /dfdf/dfdf/mongo -> mongo
-      servicename=$(echo $i | awk -F/ '{print $(NF)}')
-      echo "ensuring service: $servicename"
-
-      # read the contents of the service file - this might be a container we have already run
-      servicecontainerfile=$RUNTIME_FOLDER/services/${servicename^^}
-      servicehostfile=$RUNTIME_FOLDER/services/${servicename^^}_HOST
-
-      # we are using the internal docker networking values
-      if [[ -f $servicecontainerfile ]]; then
-        serviceid=$(cat $servicecontainerfile)
-        docker start $serviceid
-        container_ip $serviceid
-        echo $CONTAINER_IP > $servicehostfile
-        # write the service details to the env
-        envname=digger_${servicename}_host
-        echo $CONTAINER_IP > $ENV_FOLDER/${envname^^}
-      fi
-    fi
-
-  done
-
   appcontainerfile=$RUNTIME_FOLDER/nodes/${appnodename^^}
-  apphostfile=$RUNTIME_FOLDER/nodes/${appnodename^^}_HOST
-  dockernodeport=$(cat "$RUNTIME_FOLDER/nodes/${appnodename^^}_HOST")
-  if [[ -f $appcontainerfile ]]; then
-    appid=$(cat $appcontainerfile)
-    docker start $appid
-    container_ip $appid
-    echo $CONTAINER_IP > $apphostfile
-    # read in the domains file and update hipache with the route
-    while read domain; do
-      echo "   domain: $domain"
-      echo "$dockernodehost"
-      insert_hipache_route "$APP_NAME" "$domain" "$CONTAINER_IP" "$dockernodeport"
-    done < $DOMAINS_FILE
+  containerid=$(cat $appcontainerfile)
+  container_running=$(docker ps -q | grep "$containerid")
+
+  boot_services
+
+  if [[ ! -z $container_running ]]; then
+    echo "$containerid is already running!"
+    exit 0
   fi
+
+  run_app_container
+
+
+
+
+  #appcontainerfile=$RUNTIME_FOLDER/nodes/${appnodename^^}
+  #apphostfile=$RUNTIME_FOLDER/nodes/${appnodename^^}_HOST
+  #dockernodeport=$(cat "$RUNTIME_FOLDER/nodes/${appnodename^^}_HOST")
+  #if [[ -f $appcontainerfile ]]; then
+  #  appid=$(cat $appcontainerfile)
+  #  oldip=$(cat $apphostfile)
+  #  docker start $appid
+  #  container_ip $appid
+  #  echo $CONTAINER_IP > $apphostfile
+   # # read in the domains file and update hipache with the route
+   # while read domain; do
+  #    echo "   domain: $domain"
+  #    insert_hipache_route "$APP_NAME" "$domain" "$CONTAINER_IP" "$dockernodeport"
+  #  done < $DOMAINS_FILE
+
+
+    #if [[ -f $apphostfile ]]; then
+    #  KILL_APP_HOST=$(cat $appcontainerfile)
+    #fi
+
+    #if [[ -f $appportfile ]]; then
+    #  KILL_APP_PORT=$(cat $appcontainerfile);
+    #fi
+  #fi
 }
 
 function run_app(){
@@ -502,25 +586,6 @@ function run_app(){
   sleep 3
   echo ""
   echo "OK..."
-
-    echo ""
-  echo "--------------------------------------------"
-  echo ""
-  echo "gwanin insert domain tings pon hipache innit"
-  echo ""
-  echo "--------------------------------------------"
-  echo ""
-
-
-  # read in the domains file and update hipache with the route
-  while read domain; do
-    echo "   domain: $domain"
-    echo "$dockernodehost"
-    insert_hipache_route "$APP_NAME" "$domain" "$dockernodehost" "$dockernodeport"
-  done < $DOMAINS_FILE
-
-  # wait 2 seconds before killing the old container
-  sleep 2
 
   if [[ ! -z $KILL_CONTAINER ]]; then
     echo ""
@@ -563,18 +628,45 @@ case "$1" in
     #echo
     ;;
 
-  # get hipache running and assign it to the pipework bridge
-  install)
-
-    ;;
-
   # run hipache - this should be done once as root but if it goes wrong this is how you start it
-  starthipache)
-    run_hipache
+  hipache)
+    case "$2" in
+
+      start)
+        run_hipache
+        ;;
+
+      stop)
+        stop_hipache
+        ;;
+
+      connect)
+        redis-cli -h `cat $QUARRY_HOME/HIPACHE_HOST` -p `cat $QUARRY_HOME/HIPACHE_PORT`
+        ;;
+
+      *)
+        echo "usage: quarry hipache (start|stop|connect)"
+        ;;
+
+    esac
     ;;
 
-  stophipache)
-    stop_hipache
+  app)
+
+    case "$2" in
+
+      start)
+        start_app
+        ;;
+
+      stop)
+        stop_app
+        ;;
+
+      *)
+        echo "usage: quarry app (start|stop)"
+        ;;
+    esac
     ;;
 
   # move the input (tar) into where we want it on the filesystem
@@ -611,21 +703,7 @@ case "$1" in
 
     ;;
 
-  startapp)
-    
-    APP_FOLDER="$2"
 
-    start_app
-
-    ;;
-
-  stopapp)
-    
-    APP_FOLDER="$2"
-
-    stop_app
-
-    ;;
 
   cleanup)
     # delete all non-running container
@@ -654,9 +732,12 @@ case "$1" in
 
   help)
     cat<<EOF | pluginhook commands help | sort
-    help            Print the list of commands
-    plugins         Print active plugins
-    plugins-install Install active plugins
+    help                  Print the list of commands
+    hipache (start|stop)  Control the hipache server (as root)
+    run                   Run an app from its working folder
+    app (start|stop)      Start and stop a running app
+    plugins               Print active plugins
+    plugins-install       Install active plugins
 EOF
     ;;
 

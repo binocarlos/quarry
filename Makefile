@@ -2,7 +2,6 @@ GITRECEIVE_URL ?= https://raw.github.com/progrium/gitreceive/master/gitreceive
 SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
 PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
 FIREWALL_REPO ?= https://github.com/bmaeser/iptables-boilerplate.git
-QUARRYFILES_REPO ?= https://github.com/binocarlos/quarryfiles.git
 
 PWD := $(shell pwd)
 
@@ -13,11 +12,6 @@ install:
 	cp receiver /home/git/receiver
 	mkdir -p /var/lib/quarry/plugins
 	cp -r plugins/* /var/lib/quarry/plugins
-	quarry install
-
-quarryfiles:
-	cd ~ && test -d quarryfiles || git clone ${QUARRYFILES_REPO}
-	cd ~/quarryfiles && make all
 
 uninstall:
 	quarry cleanup
@@ -29,7 +23,7 @@ uninstall:
 plugins: pluginhook docker
 	quarry plugins-install
 
-dependencies: firewall gitreceive sshcommand pluginhook docker
+dependencies: gitreceive sshcommand pluginhook docker network
 
 gitreceive:
 	wget -qO /usr/local/bin/gitreceive ${GITRECEIVE_URL}
@@ -56,22 +50,28 @@ docker: aufs
 	apt-get install -y lxc-docker 
 	sleep 2 # give docker a moment i guess
 
+network:
+	sysctl -w net.ipv4.ip_forward=1
+	sleep 1
+	service docker restart
+	sleep 1
+
 aufs:
 	lsmod | grep aufs || modprobe aufs || apt-get install -y linux-image-extra-`uname -r`
 
 # the firewall so we can expose ports amoungst containers but not worry about public access to them
 # 22, 80 and 443 are let through
-firewall:
-	mkdir -p /etc/firewall
-	mkdir -p /etc/firewall/custom
-	cd ~ && test -d iptables-boilerplate || git clone ${FIREWALL_REPO}
-	cp ~/iptables-boilerplate/firewall /etc/init.d/firewall
-	cp ~/iptables-boilerplate/etc/firewall/*.conf /etc/firewall
-	chmod 755 /etc/init.d/firewall
-	update-rc.d firewall defaults
-	# create a backup of the firewall rules and allow 22 and 80 and 443 through
-	cp /etc/firewall/services.conf /etc/firewall/services.default.conf
-	cat /etc/firewall/services.default.conf | sed -r 's/#((80|443)\/(tcp|udp))/\1/' > /etc/firewall/services.conf
-	cp /etc/firewall/firewall.conf /etc/firewall/firewall.default.conf
-	cat /etc/firewall/firewall.default.conf | sed -r 's/ipv4_forwarding=false/ipv4_forwarding=true/' > /etc/firewall/firewall.conf
-	service firewall restart
+#firewall:
+#	mkdir -p /etc/firewall
+#	mkdir -p /etc/firewall/custom
+#	cd ~ && test -d iptables-boilerplate || git clone ${FIREWALL_REPO}
+#	cp ~/iptables-boilerplate/firewall /etc/init.d/firewall
+#	cp ~/iptables-boilerplate/etc/firewall/*.conf /etc/firewall
+#	chmod 755 /etc/init.d/firewall
+#	update-rc.d firewall defaults
+#	# create a backup of the firewall rules and allow 22 and 80 and 443 through
+#	cp /etc/firewall/services.conf /etc/firewall/services.default.conf
+#	cat /etc/firewall/services.default.conf | sed -r 's/#((80|443)\/(tcp|udp))/\1/' > /etc/firewall/services.conf
+#	cp /etc/firewall/firewall.conf /etc/firewall/firewall.default.conf
+#	cat /etc/firewall/firewall.default.conf | sed -r 's/ipv4_forwarding=false/ipv4_forwarding=true/' > /etc/firewall/firewall.conf
+#	service firewall restart

@@ -68,8 +68,10 @@ Vagrant.configure("2") do |config|
         "echo 'Wait for this command to finish - make a cup of tea (i.e. wait 2 mins) and then type:'; " \
         "echo '-----------------------------------------------------------------------'; " \
         "echo ''; " \
-        "echo '   vagrant reload'; " \
+        "echo '   vagrant halt'; " \
+        "echo '   vagrant up'; " \
     end
+    # Ensure memory limits are enabled
     # Activate new kernel
     pkg_cmd << "shutdown -r +1; "
 
@@ -86,7 +88,23 @@ Vagrant.configure("2") do |config|
     ##############################################################
     # run the provisioning script
 
-    config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /vagrant && echo 'DONE'"
+    pkg_cmd = "" \
+      "echo ''; " \
+      "echo '-----------------------------------------------------------------------'; " \
+      "echo ''; " \
+      "echo 'Can I dig it?'; " \
+      "echo ''; " \
+      "echo '-----------------------------------------------------------------------'; " \
+      "echo ''; " \
+      "echo '-----------------------------------------------------------------------'; " \
+      "echo ''; " \
+      "echo 'Yes you can!'; " \
+      "echo ''; " \
+      "echo '-----------------------------------------------------------------------'; ";
+
+    config.vm.provision :shell, :inline => pkg_cmd
+    
+    #config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /vagrant && echo 'DONE'"
 
   end  
 

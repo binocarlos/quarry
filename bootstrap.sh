@@ -6,7 +6,6 @@ apt-get update
 apt-get install -y git make curl software-properties-common
 
 cd ~ && test -d quarry || git clone $QUARRY_REPO
-cd quarry && test $QUARRY_BRANCH && git checkout origin/$QUARRY_BRANCH || true
 make all
 
 #echo

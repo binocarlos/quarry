@@ -73,4 +73,17 @@ We are running some global services:
 
 
 
+## install notes
 
+we must set the 
+
+	$ sudo nano /etc/default/grub
+
+	GRUB_CMDLINE_LINUX="cgroup_enable=memory swapaccount=1"
+
+	$ sudo update-grub
+	$ sudo shutdown -r +1
+
+and reboot for the memory limitations to work
+
+http://docs.docker.io/en/latest/installation/kernel/
