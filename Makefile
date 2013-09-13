@@ -9,6 +9,7 @@ all: dependencies install plugins
 
 install:
 	cp -f quarry /usr/local/bin/quarry
+	chmod a+x /usr/local/bin/quarry
 	cp receiver /home/git/receiver
 	mkdir -p /var/lib/quarry/plugins
 	cp -r plugins/* /var/lib/quarry/plugins
@@ -43,7 +44,6 @@ docker: aufs
 	egrep -i "^docker" /etc/group || groupadd docker
 	usermod -aG docker git
 	usermod -aG docker quarry
-	usermod -aG docker vagrant
 	curl https://get.docker.io/gpg | apt-key add -
 	echo deb https://get.docker.io/ubuntu docker main > /etc/apt/sources.list.d/docker.list
 	apt-get update

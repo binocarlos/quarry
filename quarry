@@ -2,10 +2,99 @@
 set -e
 # where our pluginhook plugins live - each 'commands' file extends the main script
 export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/quarry/plugins"}
-# the git deploy folder for live apps
-export QUARRY_APPS=${QUARRY_APPS:="/home/git/apps"}
+# where we run application code
+export QUARRY_APPS=${QUARRY_APPS:="$HOME/.quarry/apps"}
 # where we keep the root settings (like for hipache)
 export QUARRY_HOME=${QUARRY_HOME:="/home/quarry"}
+
+
+########################################################################
+#
+#
+#
+# app env
+#
+#
+#
+########################################################################
+
+APP_INITIALIZED=""
+
+# get the vars and folders setup for one app
+function initialize_app(){
+
+  APP_FOLDER=$1
+
+  # we only do this once
+  if [[ ! -z $APP_INITIALIZED ]]; then
+    return
+  fi
+
+  APP_INITIALIZED="1"
+
+
+  # if we just run right off the bat then we are running from the current folder
+  if [[ -z $APP_FOLDER ]]; then
+    APP_FOLDER=`pwd`
+  fi
+
+  # make sure we have a deploy id that is different each time
+  if [[ -z $DEPLOYID ]]; then
+    random_id
+    DEPLOYID=$RANDOMID
+  fi
+
+  # the name of the app is the folder it is in
+  APP_NAME=$(echo $APP_FOLDER | awk -F/ '{print $(NF)}')
+
+  QUARRY_FOLDER="$APP_FOLDER/.quarry"
+  RUNTIME_FOLDER="$QUARRY_FOLDER/runtime"
+  ENV_FOLDER="$QUARRY_FOLDER/env"
+
+  # we keep this seperate incase they are running inside a funky vm shared folder vagrant style
+  ROOT_DATA_FOLDER="$HOME/.quarry/data/$APP_NAME";
+
+  mkdir -p $QUARRY_APPS
+  mkdir -p $APP_FOLDER
+  mkdir -p $RUNTIME_FOLDER
+  mkdir -p $ENV_FOLDER
+  mkdir -p $ROOT_DATA_FOLDER
+
+  mkdir -p $RUNTIME_FOLDER/services
+  mkdir -p $RUNTIME_FOLDER/data
+  mkdir -p $RUNTIME_FOLDER/nodes
+  mkdir -p $RUNTIME_FOLDER/deployments
+
+  # the file listing the domains for this app
+  # we use hipache to route to here
+  DOMAINS_FILE="$APP_FOLDER/domains"
+
+  if [[ ! -f $DOMAINS_FILE ]]; then
+    DOMAINS_FILE="$APP_FOLDER/.quarry/domains"
+  fi
+
+  # how we will boot the app
+  BOOT_COMMAND="/usr/bin/node index.js"
+}
+
+
+
+########################################################################
+#
+#
+#
+# tools
+#
+#
+#
+########################################################################
+
+function ensure_root(){
+  if [ "$(id -u)" != "0" ]; then
+   echo "This script must be run as root" 1>&2
+   exit 1
+  fi
+}
 
 function random_id(){
   RANDOMID=`tr -dc "[0-9]" < /dev/urandom | head -c 8`
@@ -36,48 +125,103 @@ function service_port(){
     SERVICE_PORT=27017
   elif [[ "$1" == "redis" ]]; then
     SERVICE_PORT=6379
+  elif [[ "$1" == "hipache" ]]; then
+    SERVICE_PORT=6379
+  elif [[ "$1" == "etcd" ]]; then
+    SERVICE_PORT=4001
   else
     SERVICE_PORT=""
   fi
 }
 
+function service_expose_port(){
+  if [[ "$1" == "hipache" ]]; then
+    EXPOSE_SERVICE_PORT=" -p 80:80"
+  elif [[ "$1" == "etcd" ]]; then
+    EXPOSE_SERVICE_PORT=" -p 4001:4001"
+  else
+    EXPOSE_SERVICE_PORT=""
+  fi
+}
 
+function get_env_string(){
 
-# run the hipache container so we can load balance HTTP for different domains to various containers
-function run_hipache(){
+  ENV_STRING=""
+  # we loop each of the services needed in the stack
+  for i in $QUARRY_FOLDER/env/* ; do
+
+    # each service represents itself as a file named after the service
+    if [ -f "$i" ]; then
+      envname=$(echo $i | awk -F/ '{print $(NF)}')
+      envvalue=$(cat $i)
+      ENV_STRING="$ENV_STRING -e=\"$envname=$envvalue\""
+    fi
+
+  done
+}
+
+########################################################################
+#
+#
+#
+# core services
+#
+#
+#
+########################################################################
+
+# the things we run as root to keep the quarry os layer going
+# (hipache, etcd)
+function start_core_service(){
+  servicename=$1
+  serviceport=$2
+
   mkdir -p $QUARRY_HOME
 
   # the already running one
-  hipacheid=$(docker ps | grep "hipache" | awk '{print $1}')
+  serviceid=$(docker ps | grep "$servicename" | awk '{print $1}')
+  pidfile="$QUARRY_HOME/${servicename^^}_ID"
 
   # it is not running
-  if [[ -z $hipacheid ]]; then
+  if [[ -z $serviceid ]]; then
 
     # we have an existing container
-    if [[ -f "$QUARRY_HOME/HIPACHE_ID" ]]; then
-      hipacheid=$(cat "$QUARRY_HOME/HIPACHE_ID")
-      docker start $hipacheid
+    if [[ -f "$pidfile" ]]; then
+      serviceid=$(cat "$pidfile")
+      docker start $serviceid
     # first time setup
     else
-      hipacheid=$(docker run -d -p 80:80 -t quarry/hipache)  
+      service_expose_port $servicename
+      echo $EXPOSE_SERVICE_PORT
+      serviceid=$(docker run -d $EXPOSE_SERVICE_PORT -t quarry/$servicename)  
     fi
 
-    hipacheport=6379
-    container_ip $hipacheid
-    echo "HIPACHE IP: $CONTAINER_IP"
-    echo "$CONTAINER_IP" > $QUARRY_HOME/HIPACHE_HOST
-    echo "$hipacheid" > $QUARRY_HOME/HIPACHE_ID
-    echo "$hipacheport" > $QUARRY_HOME/HIPACHE_PORT
+    container_ip $serviceid
+    echo "${servicename^^} IP: $CONTAINER_IP"
+    echo "$CONTAINER_IP" > $QUARRY_HOME/${servicename^^}_HOST
+    echo "$serviceid" > $QUARRY_HOME/${servicename^^}_ID
+    echo "$serviceport" > $QUARRY_HOME/${servicename^^}_PORT
   fi
 }
 
-function stop_hipache(){
-  hipacheid=$(docker ps | grep "hipache" | awk '{print $1}')
+function stop_core_service(){
+  servicename=$1
+  serviceid=$(docker ps | grep "$servicename" | awk '{print $1}')
 
-  if [[ ! -z $hipacheid ]]; then
-    docker stop $hipacheid
+  if [[ ! -z $serviceid ]]; then
+    docker stop $serviceid
   fi
 }
+
+########################################################################
+#
+#
+#
+# hipache routing
+#
+#
+#
+########################################################################
 
 # netcat a command to the hipache redis
 function hipache_command(){
@@ -106,50 +250,18 @@ function insert_hipache_route(){
   hipache_command "rpush $wildkey $endpoint"
 }
 
-# get the vars and folders setup for one app
-function initialize_app(){
-  # if we just run right off the bat then we are running from the current folder
-  if [[ -z $APP_FOLDER ]]; then
-    APP_FOLDER=`pwd`
-  fi
 
-  # make sure we have a deploy id that is different each time
-  if [[ -z $DEPLOYID ]]; then
-    random_id
-    DEPLOYID=$RANDOMID
-  fi
 
-  # the name of the app is the folder it is in
-  APP_NAME=$(echo $APP_FOLDER | awk -F/ '{print $(NF)}')
 
-  QUARRY_FOLDER="$APP_FOLDER/.quarry"
-  RUNTIME_FOLDER="$QUARRY_FOLDER/runtime"
-  ENV_FOLDER="$QUARRY_FOLDER/env"
-
-  # we keep this seperate incase they are running inside a funky vm shared folder vagrant style
-  ROOT_DATA_FOLDER="$HOME/quarrydata";
-
-  mkdir -p $RUNTIME_FOLDER
-  mkdir -p $ENV_FOLDER
-  mkdir -p $ROOT_DATA_FOLDER
-
-  mkdir -p $RUNTIME_FOLDER/services
-  mkdir -p $RUNTIME_FOLDER/data
-  mkdir -p $RUNTIME_FOLDER/nodes
-  mkdir -p $RUNTIME_FOLDER/deployments
-
-  # the file listing the domains for this app
-  # we use hipache to route to here
-  DOMAINS_FILE="$APP_FOLDER/domains"
-
-  if [[ ! -f $DOMAINS_FILE ]]; then
-    DOMAINS_FILE="$APP_FOLDER/.quarry/domains"
-  fi
-
-  # how we will boot the app
-  BOOT_COMMAND="/usr/bin/node index.js"
-}
-
+########################################################################
+#
+#
+#
+# build
+#
+#
+#
+########################################################################
 
 function build_app(){
   ########################################################################
@@ -209,15 +321,15 @@ function build_app(){
   echo $BOOT_COMMAND > $QUARRY_FOLDER/boot_command
 }
 
-#function stop_services(){
-#  for i in $QUARRY_FOLDER/services/* ; do
+########################################################################
 #
-#    # each service represents itself as a file named after the service
-#    if [ -f "$i" ]; then
-#      
-#    fi
-#  done
-#}
+#
+#
+# services
+#
+#
+#
+########################################################################
 
 function boot_services(){
   ########################################################################
@@ -305,6 +417,16 @@ function boot_services(){
   done
 }
 
+########################################################################
+#
+#
+#
+# image
+#
+#
+#
+########################################################################
+
 function prepare_app_image(){
 
   if [[ $DEPLOY_MODE -eq "production" ]]; then
@@ -337,22 +459,16 @@ EOF
   fi
 }
 
-function get_env_string(){
 
-  ENV_STRING=""
-  # we loop each of the services needed in the stack
-  for i in $QUARRY_FOLDER/env/* ; do
-
-    # each service represents itself as a file named after the service
-    if [ -f "$i" ]; then
-      envname=$(echo $i | awk -F/ '{print $(NF)}')
-      envvalue=$(cat $i)
-      ENV_STRING="$ENV_STRING -e=\"$envname=$envvalue\""
-    fi
-
-  done
-}
-
+########################################################################
+#
+#
+#
+# app containers
+#
+#
+#
+########################################################################
 
 function run_app_container(){
 
@@ -518,35 +634,19 @@ function start_app(){
   fi
 
   run_app_container
-
-
-
-
-  #appcontainerfile=$RUNTIME_FOLDER/nodes/${appnodename^^}
-  #apphostfile=$RUNTIME_FOLDER/nodes/${appnodename^^}_HOST
-  #dockernodeport=$(cat "$RUNTIME_FOLDER/nodes/${appnodename^^}_HOST")
-  #if [[ -f $appcontainerfile ]]; then
-  #  appid=$(cat $appcontainerfile)
-  #  oldip=$(cat $apphostfile)
-  #  docker start $appid
-  #  container_ip $appid
-  #  echo $CONTAINER_IP > $apphostfile
-   # # read in the domains file and update hipache with the route
-   # while read domain; do
-  #    echo "   domain: $domain"
-  #    insert_hipache_route "$APP_NAME" "$domain" "$CONTAINER_IP" "$dockernodeport"
-  #  done < $DOMAINS_FILE
-
-
-    #if [[ -f $apphostfile ]]; then
-    #  KILL_APP_HOST=$(cat $appcontainerfile)
-    #fi
-
-    #if [[ -f $appportfile ]]; then
-    #  KILL_APP_PORT=$(cat $appcontainerfile);
-    #fi
-  #fi
 }
+
+
+
+########################################################################
+#
+#
+#
+# main run method
+#
+#
+#
+########################################################################
 
 function run_app(){
 
@@ -605,12 +705,18 @@ function run_app(){
 case "$1" in
   receive)
     APP="$2";
-    echo "-----> Uploading $APP ..."
-    cat | quarry upload $APP
 
     # fetch the git head to use as the deploy id
     DEPLOYID=$(cd ~/$APP && git rev-parse HEAD | cut -c -8);
 
+    echo "-----> Uploading $APP ..."
+    initialize_app "$QUARRY_APPS/$APP"
+
+    # move the input (tar) into where we want it on the filesystem
+    # this is run from a gitreceive
+    cat | tar -xC $APP_FOLDER
+
+    
     echo "-----> Installing $APP ..."
     quarry run $APP $DEPLOYID production
     #echo "-----> Build complete!"
@@ -628,20 +734,51 @@ case "$1" in
     #echo
     ;;
 
-  # run hipache - this should be done once as root but if it goes wrong this is how you start it
-  hipache)
+  build)
+    initialize_app
+
+    echo "bulding"
+    build_app
+
+    ;;
+
+  core)
+    ensure_root
     case "$2" in
 
       start)
-        run_hipache
+        quarry hipache start
+        #quarry etcd start
         ;;
 
       stop)
-        stop_hipache
+        quarry hipache stop
+        #quarry etcd stop
+        ;;
+
+      *)
+        echo "usage: quarry core (start|stop)"
+        ;;
+
+    esac
+    ;;
+
+  # run hipache - this should be done once as root but if it goes wrong this is how you start it
+  hipache)
+    ensure_root
+    case "$2" in
+
+      start)
+        service_port hipache
+        start_core_service hipache $SERVICE_PORT
+        ;;
+
+      stop)
+        stop_core_service hipache
         ;;
 
       connect)
-        redis-cli -h `cat $QUARRY_HOME/HIPACHE_HOST` -p `cat $QUARRY_HOME/HIPACHE_PORT`
+        telnet `cat $QUARRY_HOME/HIPACHE_HOST` `cat $QUARRY_HOME/HIPACHE_PORT`
         ;;
 
       *)
@@ -650,6 +787,27 @@ case "$1" in
 
     esac
     ;;
+
+  # run etcd
+#  etcd)
+#    ensure_root
+#    case "$2" in
+#
+#      start)
+#        service_port etcd
+#        start_core_service etcd $SERVICE_PORT
+#        ;;
+#
+#      stop)
+#        stop_core_service etcd
+#        ;;
+#
+#      *)
+#        echo "usage: quarry etcd (start|stop)"
+#        ;;
+#
+#    esac
+#    ;;
 
   app)
 
@@ -669,21 +827,7 @@ case "$1" in
     esac
     ;;
 
-  # move the input (tar) into where we want it on the filesystem
-  # this is run from a gitreceive
-  upload)
-    APP="$2"
-    APP_FOLDER="$QUARRY_APPS/$APP"
-    
-    # stream the code into the deploy folder
-    cat | tar -xC $APP_FOLDER
 
-    ;;
-
-  developer)
-    DEPLOY_MODE='developer'
-    run_app
-    ;;
 
   # run an app
   # if passed a folder then that is what we are running
@@ -703,7 +847,22 @@ case "$1" in
 
     ;;
 
+  developer)
+    DEPLOY_MODE='developer'
+    run_app
+    ;;
 
+  reset)
+    ensure_root
+    read -p "Are you sure? " -n 1 -r
+    echo    # (optional) move to a new line
+    if [[ $REPLY =~ ^[Yy]$ ]]
+    then
+      quarry core stop
+      rm -rf $QUARRY_HOME/*
+      rm -rf $QUARRY_APPS/*
+    fi
+    ;;
 
   cleanup)
     # delete all non-running container
