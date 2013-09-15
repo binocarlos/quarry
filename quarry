@@ -358,11 +358,13 @@ function boot_services(){
         containerid=$(cat $containerfile);
       fi
 
+      service_port $servicename
+
       # there is no container recorded - create the service
       if [[ -z $containerid ]]; then
 
         # what internal port does this service run on
-        service_port $servicename
+        
         datafolder=$ROOT_DATA_FOLDER/$servicename
 
         mkdir -p $datafolder
@@ -375,9 +377,6 @@ function boot_services(){
         container_ip $containerid
     
         #dockerserviceport=$(docker port $containerid $SERVICE_PORT)
-
-        # we are using the internal docker networking values
-        container_ip $containerid
 
         dockerserviceport=$SERVICE_PORT
         dockerservicehost=$CONTAINER_IP
@@ -396,8 +395,10 @@ function boot_services(){
         else
           echo "service already running"
         fi
-        dockerservicehost=$(cat $hostfile)
-        dockerserviceport=$(cat $portfile)
+
+        container_ip $containerid
+        dockerserviceport=$SERVICE_PORT
+        dockerservicehost=$CONTAINER_IP
       fi
 
       # write the service details to the env
