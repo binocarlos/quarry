@@ -1,58 +1,31 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-############################################################
-#############################################################
-# A single server quarry setup
-#
-# this plays the role of a single HQ server that spawns containers on itself with no scalaing
-#
-# it is perfect for a local developer to work on a single application
-
 BOX_NAME = ENV['BOX_NAME'] || "precise64"
 BOX_URI = ENV['BOX_URI'] || "https://s3-us-west-2.amazonaws.com/squishy.vagrant-boxes/precise64_squishy_2013-02-09.box"
+VF_BOX_URI = ENV['BOX_URI'] || "http://files.vagrantup.com/precise64_vmware_fusion.box"
+AWS_REGION = ENV['AWS_REGION'] || "us-east-1"
+AWS_AMI    = ENV['AWS_AMI']    || "ami-d0f89fb9"
+FORWARD_DOCKER_PORTS = ENV['FORWARD_DOCKER_PORTS']
 
-Vagrant.configure("2") do |config|
-
+Vagrant::Config.run do |config|
+  # Setup virtual machine box. This VM configuration code is always executed.
   config.vm.box = BOX_NAME
   config.vm.box_url = BOX_URI
 
-  config.vm.provider :virtualbox do |vb|
-    vb.customize ["modifyvm", :id, "--memory", "1024"]
-  end
-
-  ## fix the IP to a local sub-net
-  config.vm.network :private_network, ip: "192.168.8.120"
-
-  ## expose the main master web port
-  config.vm.network :forwarded_port, guest: 80, host: 8080
-
-  ## mount the folder above this repo as /srv/projects - this means we can develop from this folder
-  config.vm.synced_folder "../", "/srv/projects"
-  config.vm.synced_folder "./", "/srv/quarry"
-
-  ####################################################################################
-  ####################################################################################
-  ####################################################################################
-  ####################################################################################
-  ####################################################################################
-  #
-  #
-  # this updates the kernel so we can use lxc containers and docker
-  #
-  #
-
-  # Provision docker and new kernel if deployment was not done
+  # Provision docker and new kernel if deployment was not done.
+  # It is assumed Vagrant can successfully launch the provider instance.
   if Dir.glob("#{File.dirname(__FILE__)}/.vagrant/machines/default/*/id").empty?
-    pkg_cmd = "apt-get update -qq; apt-get install -q -y python-software-properties; " \
-    # Add X.org Ubuntu backported 3.8 kernel
-    pkg_cmd << "add-apt-repository -y ppa:ubuntu-x-swat/r-lts-backport; " \
-      "apt-get update -qq; apt-get install -q -y linux-image-3.8.0-19-generic; "
-    # Add guest additions if local vbox VM
-    is_vbox = true
-    ARGV.each do |arg| is_vbox &&= !arg.downcase.start_with?("--provider") end
-    if is_vbox
-      pkg_cmd << "apt-get install -q -y linux-headers-3.8.0-19-generic dkms; " \
+    # Add lxc-docker package
+    pkg_cmd = "wget -q -O - https://get.docker.io/gpg | apt-key add -;" \
+      "echo deb http://get.docker.io/ubuntu docker main > /etc/apt/sources.list.d/docker.list;" \
+      "apt-get update -qq; apt-get install -q -y --force-yes lxc-docker; "
+    # Add Ubuntu raring backported kernel
+    pkg_cmd << "apt-get update -qq; apt-get install -q -y linux-image-generic-lts-raring; "
+    # Add guest additions if local vbox VM. As virtualbox is the default provider,
+    # it is assumed it won't be explicitly stated.
+    if ENV["VAGRANT_DEFAULT_PROVIDER"].nil? && ARGV.none? { |arg| arg.downcase.start_with?("--provider") }
+      pkg_cmd << "apt-get install -q -y linux-headers-generic-lts-raring dkms; " \
         "echo 'Downloading VBox Guest Additions...'; " \
         "wget -q http://dlc.sun.com.edgesuite.net/virtualbox/4.2.12/VBoxGuestAdditions_4.2.12.iso; "
       # Prepare the VM to add guest additions after reboot
@@ -61,35 +34,15 @@ Vagrant.configure("2") do |config|
           "rm /root/guest_additions.sh; ' > /root/guest_additions.sh; " \
         "chmod 700 /root/guest_additions.sh; " \
         "sed -i -E 's#^exit 0#[ -x /root/guest_additions.sh ] \\&\\& /root/guest_additions.sh#' /etc/rc.local; " \
-        "echo ''; " \
-        "echo '-----------------------------------------------------------------------'; " \
         "echo 'Installation of VBox Guest Additions is proceeding in the background.'; " \
-        "echo ''; " \
-        "echo 'Wait for this command to finish - make a cup of tea (i.e. wait 2 mins) and then type:'; " \
-        "echo '-----------------------------------------------------------------------'; " \
-        "echo ''; " \
-        "echo '   vagrant halt'; " \
-        "echo '   vagrant up'; " \
+        "echo '\"vagrant reload\" can be used in about 2 minutes to activate the new guest additions.'; "
     end
-    # Ensure memory limits are enabled
     # Activate new kernel
     pkg_cmd << "shutdown -r +1; "
-
-    ##############################################################
-    ##############################################################
-    ##############################################################
-    # inline the command created above - this happens the very first time
-
     config.vm.provision :shell, :inline => pkg_cmd
   else
-
-    ##############################################################
-    ##############################################################
-    ##############################################################
-    # run the provisioning script
-
     pkg_cmd = "" \
-      "echo ''; " \
+      "apt-get install -y git make curl software-properties-common; " \
       "echo '-----------------------------------------------------------------------'; " \
       "echo ''; " \
       "echo 'Can I dig it?'; " \
@@ -103,9 +56,67 @@ Vagrant.configure("2") do |config|
       "echo '-----------------------------------------------------------------------'; ";
 
     config.vm.provision :shell, :inline => pkg_cmd
-    
-    #config.vm.provision :shell, :inline => "QUARRY_ENV=development cd /vagrant && echo 'DONE'"
+  end
+end
 
-  end  
 
+# Providers were added on Vagrant >= 1.1.0
+Vagrant::VERSION >= "1.1.0" and Vagrant.configure("2") do |config|
+
+  ## fix the IP to a local sub-net
+  config.vm.network :private_network, ip: "192.168.8.120"
+
+  ## expose the main master web port
+  config.vm.network :forwarded_port, guest: 80, host: 8080
+
+  ## mount the folder above this repo as /srv/projects - this means we can develop from this folder
+  config.vm.synced_folder "../", "/srv/projects"
+
+
+  config.vm.provider :aws do |aws, override|
+    aws.access_key_id = ENV["AWS_ACCESS_KEY_ID"]
+    aws.secret_access_key = ENV["AWS_SECRET_ACCESS_KEY"]
+    aws.keypair_name = ENV["AWS_KEYPAIR_NAME"]
+    override.ssh.private_key_path = ENV["AWS_SSH_PRIVKEY"]
+    override.ssh.username = "ubuntu"
+    aws.region = AWS_REGION
+    aws.ami    = AWS_AMI
+    aws.instance_type = "t1.micro"
+  end
+
+  config.vm.provider :rackspace do |rs|
+    config.ssh.private_key_path = ENV["RS_PRIVATE_KEY"]
+    rs.username = ENV["RS_USERNAME"]
+    rs.api_key  = ENV["RS_API_KEY"]
+    rs.public_key_path = ENV["RS_PUBLIC_KEY"]
+    rs.flavor   = /512MB/
+    rs.image    = /Ubuntu/
+  end
+
+  config.vm.provider :vmware_fusion do |f, override|
+    override.vm.box = BOX_NAME
+    override.vm.box_url = VF_BOX_URI
+    override.vm.synced_folder ".", "/vagrant", disabled: true
+    f.vmx["displayName"] = "docker"
+  end
+
+  config.vm.provider :virtualbox do |vb|
+    config.vm.box = BOX_NAME
+    config.vm.box_url = BOX_URI
+    vb.customize ["modifyvm", :id, "--memory", "1024"]
+  end
+end
+
+if !FORWARD_DOCKER_PORTS.nil?
+  Vagrant::VERSION < "1.1.0" and Vagrant::Config.run do |config|
+    (49000..49900).each do |port|
+      config.vm.forward_port port, port
+    end
+  end
+
+  Vagrant::VERSION >= "1.1.0" and Vagrant.configure("2") do |config|
+    (49000..49900).each do |port|
+      config.vm.network :forwarded_port, :host => port, :guest => port
+    end
+  end
 end
