@@ -1,44 +1,42 @@
 GITRECEIVE_URL ?= https://raw.github.com/progrium/gitreceive/master/gitreceive
-SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
-PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
-FIREWALL_REPO ?= https://github.com/bmaeser/iptables-boilerplate.git
+QUARRYFILES_URL ?= https://github.com/binocarlos/quarryfiles.git
 
 PWD := $(shell pwd)
 
-all: dependencies install plugins
+all: dependencies install
 
 install:
 	cp -f quarry /usr/local/bin/quarry
 	chmod a+x /usr/local/bin/quarry
 	cp receiver /home/git/receiver
-	mkdir -p /var/lib/quarry/plugins
-	cp -r plugins/* /var/lib/quarry/plugins
 
 uninstall:
-	quarry cleanup
-	rm -rf /usr/local/bin/quarry
+	rm -f /usr/local/bin/quarry
 	rm -rf /home/git/receiver
-	rm -rf /var/lib/quarry/plugins
-	rm -rf ~/quarryfiles
 
-plugins: pluginhook docker
-	quarry plugins-install
-
-dependencies: gitreceive sshcommand pluginhook docker network
+dependencies: gitreceive docker nginx network quarryfiles
 
 gitreceive:
 	wget -qO /usr/local/bin/gitreceive ${GITRECEIVE_URL}
 	chmod +x /usr/local/bin/gitreceive
 	test -f /home/git/receiver || gitreceive init
 
-sshcommand:
-	wget -qO /usr/local/bin/sshcommand ${SSHCOMMAND_URL}
-	chmod +x /usr/local/bin/sshcommand
-	sshcommand create quarry /usr/local/bin/quarry
+quarryfiles:
+	cd ~ && test -d quarryfiles || git clone ${QUARRYFILES_URL}
+	cd ~/quarryfiles && make all
 
-pluginhook:
-	wget -qO /tmp/pluginhook_0.1.0_amd64.deb ${PLUGINHOOK_URL}
-	dpkg -i /tmp/pluginhook_0.1.0_amd64.deb
+nginx:
+	add-apt-repository -y ppa:nginx/stable
+	apt-get update
+	apt-get install -y nginx
+	# this lets us sudo service nginx restart
+	usermod -aG admin git
+	mkdir -p /home/git/nginx
+	chown -R git:admin /home/git/nginx
+	chmod 0775 /home/git/nginx
+	echo "include /home/git/nginx/*.conf;" > /etc/nginx/conf.d/quarry.conf
+	sed -i 's/# server_names_hash_bucket_size/server_names_hash_bucket_size/' /etc/nginx/nginx.conf
+	/etc/init.d/nginx start
 
 docker: aufs
 	egrep -i "^docker" /etc/group || groupadd docker
@@ -50,6 +48,7 @@ docker: aufs
 	apt-get install -y lxc-docker 
 	sleep 2 # give docker a moment i guess
 
+# enable ipv4 forwarding
 network:
 	sysctl -w net.ipv4.ip_forward=1
 	sleep 1
