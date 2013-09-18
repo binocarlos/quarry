@@ -30,6 +30,7 @@ nginx:
 	apt-get update
 	apt-get install -y nginx
 	# this lets us sudo service nginx restart
+	groupadd -f admin
 	usermod -aG admin git
 	mkdir -p /home/git/nginx
 	chown -R git:admin /home/git/nginx
