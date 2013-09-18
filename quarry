@@ -317,10 +317,16 @@ function build_digger(){
 
   # build the digger app into the .quarry folder - we can study the files after
   # the build is a read only because the files are root inside the container
+  random_id
+  mkdir -p /tmp/quarrybuild
+  cp -r $SOURCE_FOLDER /tmp/quarrybuild/$RANDOMID
 
-  docker run -a=stdout -v $SOURCE_FOLDER:/srv/quarryapp -w /srv/quarryapp -t quarrystack/digger rm -rf .quarry
-  docker run -a=stdout -v $SOURCE_FOLDER:/srv/quarryapp -w /srv/quarryapp -t quarrystack/digger digger build
+  docker run -a=stdout -v /tmp/quarrybuild/$RANDOMID:/srv/quarryapp -w /srv/quarryapp -t quarrystack/digger rm -rf .quarry
+  docker run -a=stdout -v /tmp/quarrybuild/$RANDOMID:/srv/quarryapp -w /srv/quarryapp -t quarrystack/digger digger build
 
+  cp -r /tmp/quarrybuild/$RANDOMID/.quarry $SOURCE_FOLDER/.quarry
+
+  sudo rm -rf /tmp/quarrybuild/$RANDOMID
 }
 
 function build_image(){
@@ -537,6 +543,7 @@ case "$1" in
     DEPLOYID=$(cd ~/$APP && git rev-parse HEAD | cut -c -8);
 
     sourcefolder=$QUARRY_DEPLOY/$APP
+    rm -rf $sourcefolder
     mkdir -p $sourcefolder
     # move the input (tar) into where we want it on the filesystem
     # this is run from a gitreceive
