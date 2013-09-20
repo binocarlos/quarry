@@ -8,9 +8,9 @@ export QUARRY_DEPLOY=${QUARRY_APPS:="$HOME/quarryapps"}
 export QUARRY_RUNTIME=${QUARRY_RUNTIME:="$HOME/quarryruntime"}
 
 # 128MB
-#export memorylimit=134217728
+export memorylimit=134217728
 # 64MB
-export memorylimit=67108864
+#export memorylimit=67108864
 # 32MB
 #export memorylimit=33554432
 
@@ -408,7 +408,8 @@ function run_node_container(){
   # make one string that has all of the env in one docker command string
   get_env_string
 
-  dockercommand="docker run -i $ENV_STRING -w /srv/quarryapp -m $memorylimit -t $APP_NAME/app mon \"$BOOT_COMMAND\""
+  # -m $memorylimit 
+  dockercommand="docker run -i $ENV_STRING -w /srv/quarryapp -t $APP_NAME/app mon \"$BOOT_COMMAND\""
 
   echo ""
   echo "---------------------------------------------------"
@@ -418,7 +419,8 @@ function run_node_container(){
   echo "---------------------------------------------------"
   echo ""
 
-  appcontainerid=$(docker run -d $ENV_STRING -w /srv/quarryapp -m $memorylimit -t $APP_NAME/app mon "$BOOT_COMMAND")
+  #  -m $memorylimit
+  appcontainerid=$(docker run -d $ENV_STRING -w /srv/quarryapp -t $APP_NAME/app mon "$BOOT_COMMAND")
 
   # get the ip of the new container
   container_ip $appcontainerid

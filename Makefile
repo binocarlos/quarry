@@ -9,6 +9,7 @@ install:
 	cp -f quarry /usr/local/bin/quarry
 	chmod a+x /usr/local/bin/quarry
 	cp receiver /home/git/receiver
+	@echo "dont forget to add admin group non password sudo"
 
 uninstall:
 	rm -f /usr/local/bin/quarry
