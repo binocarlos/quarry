@@ -44,13 +44,17 @@ function initialize_app(){
   APP_NAME=$(echo $SOURCE_FOLDER | awk -F/ '{print $(NF)}' | sed -r 's/-//')
 
   RUNTIME_FOLDER="$QUARRY_RUNTIME/$APP_NAME"
-  ROOT_DATA_FOLDER="$RUNTIME_FOLDER/$APP_NAME"
-  ENV_FOLDER="$RUNTIME_FOLDER/$APP_NAME"
 
+  SERVICES_FOLDER="$RUNTIME_FOLDER/services"
+  NODES_FOLDER="$RUNTIME_FOLDER/nodes"
+  ROOT_DATA_FOLDER="$RUNTIME_FOLDER/data"
+  ENV_FOLDER="$RUNTIME_FOLDER/env"
+
+  mkdir -p $SERVICES_FOLDER
+  mkdir -p $NODES_FOLDER
+  mkdir -p $ROOT_DATA_FOLDER
   mkdir -p $ENV_FOLDER
-  mkdir -p $RUNTIME_FOLDER/services
-  mkdir -p $RUNTIME_FOLDER/nodes
-
+  
   # the file listing the domains for this app
   # we use hipache to route to here
   DOMAINS_FILE="$SOURCE_FOLDER/domains"
@@ -574,7 +578,9 @@ case "$1" in
     sudo service nginx stop
     
     initialize_app
+    
     build_digger
+
     boot_services
 
     nodename=all
