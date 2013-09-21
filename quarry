@@ -212,6 +212,9 @@ function get_env_string(){
 ########################################################################
 
 function boot_services(){
+
+  expose_flag=$1
+
   ########################################################################
   ########################################################################
   ########################################################################
@@ -238,7 +241,14 @@ function boot_services(){
         containerid=$(cat $containerfile);
       fi
 
+      exposest=""
+
       service_port $servicename
+
+      if [[ ! -z $expose_flag ]]; then
+        exposest=" -p $SERVICE_PORT:$SERVICE_PORT"
+        containerid=""
+      fi
 
       # there is no container recorded - create the service
       if [[ -z $containerid ]]; then
@@ -249,10 +259,11 @@ function boot_services(){
 
         mkdir -p $datafolder
 
+
         # run the service container
         # write the container id to the $containerfile
         # mount a volume -> runtime/data/redis
-        containerid=$(docker run -d -v $datafolder:/data/db -t quarrystack/$servicename)
+        containerid=$(docker run -d -v $datafolder:/data/db $exposest -t quarrystack/$servicename)
 
         container_ip $containerid
     
@@ -609,6 +620,16 @@ case "$1" in
     
     docker run -i $ENV_STRING -v $SOURCE_FOLDER:/srv/quarryapp -p 80:80 -w /srv/quarryapp -t quarrystack/digger $BOOT_COMMAND
 
+    ;;
+
+  # boot the services but mounted on a local port
+  # this lets us do local development without needing to install servers
+  devservices)
+    sudo service nginx stop
+    
+    initialize_app
+
+    boot_services yes
     ;;
 
   ps)
