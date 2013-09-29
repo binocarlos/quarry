@@ -585,18 +585,20 @@ case "$1" in
   # gets the services booted and builds but runs the app interactive
   # and does not mess with nginx
   develop)
-  
+
+    mode=$2
+
     sudo service nginx stop
     
     initialize_app
     
-    build_digger
+    #build_digger
 
     boot_services
 
-    nodename=all
-    nodefile=$SOURCE_FOLDER/.quarry/nodes/$nodename
-    echo "booting node: $nodename"
+    #nodename=all
+    #nodefile=$SOURCE_FOLDER/.quarry/nodes/$nodename
+    #echo "booting node: $nodename"
 
     ########################################################################
     ########################################################################
@@ -606,9 +608,9 @@ case "$1" in
     # any containers we find already running we will clear at the end
     # once we have changed the front end routing
     
-    BOOT_COMMAND=$(cat $nodefile)
+    #BOOT_COMMAND=$(cat $nodefile)
 
-    echo "running boot: $BOOT_COMMAND"
+    #echo "running boot: $BOOT_COMMAND"
 
     # make one string that has all of the env in one docker command string
     get_env_string
@@ -618,8 +620,23 @@ case "$1" in
     echo "$ENV_STRING"
     echo
     
-    docker run -i $ENV_STRING -v $SOURCE_FOLDER:/srv/quarryapp -p 80:80 -w /srv/quarryapp -t quarrystack/digger $BOOT_COMMAND
+    ## this is for the root digger developers to be able to test a stack + the local digger code
+    ROOT_VOLUMES=""
+    if [[ $mode == "root" ]]; then
+      ROOT_VOLUMES=" -v /srv/projects:/srv/projects -v /usr/lib/node_modules:/usr/lib/node_modules "
+      echo "ROOT VOLUMES:"
+      echo
+      echo $ROOT_VOLUMES
+      echo
+    fi
 
+    st="docker run -i $ROOT_VOLUMES $ENV_STRING -v $SOURCE_FOLDER:/srv/quarryapp -p 80:80 -w /srv/quarryapp -t quarrystack/digger digger run"
+    echo
+    echo "-------------------------------------------------------------------------"
+    echo $st
+    echo "-------------------------------------------------------------------------"
+    echo
+    docker run -i $ROOT_VOLUMES $ENV_STRING -v $SOURCE_FOLDER:/srv/quarryapp -p 80:80 -w /srv/quarryapp -t quarrystack/digger digger run
     ;;
 
   # boot the services but mounted on a local port
