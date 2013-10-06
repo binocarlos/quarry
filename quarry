@@ -649,6 +649,10 @@ case "$1" in
     boot_services yes
     ;;
 
+  devmongo)
+    docker run -i -t -entrypoint "/bin/bash" quarrystack/mongo
+    ;;
+
   ps)
     # we loop each of the services needed in the stack
     for i in $QUARRY_DEPLOY/* ; do
