@@ -653,6 +653,26 @@ case "$1" in
     docker run -i -t -entrypoint "/bin/bash" quarrystack/mongo
     ;;
 
+  connect)
+    initialize_app
+    servicename=$2
+    echo "connecting service: $servicename"
+    if [[ -z $servicename ]]; then
+      echo "usage: quarry connect <servicename>";
+      exit
+    fi
+    # read the contents of the service file - this might be a container we have already run
+    containerfile=$RUNTIME_FOLDER/services/${servicename^^}
+    container=`cat $containerfile`
+    container_ip $container
+
+    if [[ $servicename == "mongo" ]]; then
+      docker run -i -entrypoint "/usr/bin/mongo" -t quarrystack/mongo --host=$CONTAINER_IP  
+    elif [[ $servicename == "redis" ]]; then
+      docker run -i -entrypoint "/usr/bin/redis-cli" -t quarrystack/redis -h $CONTAINER_IP
+    fi
+    ;;
+
   ps)
     # we loop each of the services needed in the stack
     for i in $QUARRY_DEPLOY/* ; do
