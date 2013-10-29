@@ -200,6 +200,23 @@ function get_env_string(){
   done
 }
 
+########################################################################
+#
+#
+#
+# env
+#
+#
+#
+########################################################################
+
+function write_env(){
+  
+  echo $APP_NAME > $ENV_FOLDER/DIGGER_APP_NAME
+  echo $RUNTIME_FOLDER > $ENV_FOLDER/DIGGER_RUNTIME_FOLDER
+  echo $ROOT_DATA_FOLDER > $ENV_FOLDER/DIGGER_ROOT_DATA_FOLDER
+
+}
 
 ########################################################################
 #
@@ -515,6 +532,8 @@ function run_app(){
   build_image
 
   boot_services
+
+  write_env
   
   run_app_containers
   
@@ -595,6 +614,8 @@ case "$1" in
     #build_digger
 
     boot_services
+
+    write_env
 
     #nodename=all
     #nodefile=$SOURCE_FOLDER/.quarry/nodes/$nodename
