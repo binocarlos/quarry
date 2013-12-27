@@ -30,11 +30,18 @@ case "$1" in
     docker commit $id $IMAGE > /dev/null
     [[ -d $CACHE_DIR ]] || mkdir $CACHE_DIR
     pluginhook pre-build $APP
-    id=$(docker run -d -v $CACHE_DIR:/cache $IMAGE node /opt/quarry/bin/quarry-cli build -d /app)
-    docker attach $id
-    test $(docker wait $id) -eq 0
-    docker commit $id $IMAGE > /dev/null
-    pluginhook post-build $APP
+    id=$(docker run $IMAGE node /opt/quarry/bin/quarry-cli build $APP /app)
+    echo $id
+    #docker attach $id
+    #test $(docker wait $id) -eq 0
+    #docker commit $id $IMAGE > /dev/null
+    #pluginhook post-build $APP
+    ;;
+
+  testbuild)
+    APP="$2";
+    SOURCE_FOLDER=`pwd`
+    tar -c . | quarry build $APP
     ;;
 
   cleanup)
