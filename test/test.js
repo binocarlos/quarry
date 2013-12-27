@@ -45,9 +45,7 @@ describe('quarry', function(){
 	    	dir:__dirname
 	    })
 
-	    builder.instructions.length.should.equal(5);
-
-			builder.instructions[4].type.should.equal('deploy');
+	    console.dir(builder.instructions);
 			done();
 	    
 

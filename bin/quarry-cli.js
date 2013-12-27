@@ -8,17 +8,21 @@ var program = require('commander');
 var quarry = require('../src');
 
 program
-  .option('-d, --dir <string>', 'the folder the quarry.yml file lives in', '.')
   .version(version)
 
 program
-  .command('build')
+  .command('build [id] [input]')
   .description('build an app folder into quarry launch file')
-  .action(function(){
+  .action(function(id, input){
 
-    console.log('-------------------------------------------');
-    console.dir(program.dir);
+    var builder = quarry.builder({
+      id:id,
+      dir:input
+    })
 
+
+    console.dir(builder.instructions);
+    
   })
 
 // run help if the command is not known or they just type 'digger'

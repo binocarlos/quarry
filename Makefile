@@ -34,6 +34,9 @@ pluginhook:
 	wget -qO /tmp/pluginhook_0.1.0_amd64.deb ${PLUGINHOOK_URL}
 	dpkg -i /tmp/pluginhook_0.1.0_amd64.deb
 
+quarry-base:
+	docker build -t quarry/base .
+
 docker: aufs
 	egrep -i "^docker" /etc/group || groupadd docker
 	usermod -aG docker quarry

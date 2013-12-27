@@ -37,6 +37,7 @@
     "should": "~2.1.0"
   },
   "dependencies": {
-    "js-yaml": "~3.0.1"
+    "js-yaml": "~3.0.1",
+    "commander": "~2.1.0"
   }
 }

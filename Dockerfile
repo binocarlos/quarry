@@ -1,3 +1,2 @@
 FROM quarry/node
-
-npm install -g quarry
+ADD . /opt/quarry
