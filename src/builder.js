@@ -23,7 +23,13 @@ var util = require('util');
 
 function Builder(options){
   EventEmitter.call(this);
+
   this.options = options || {};
+
+  if(!this.options.id){
+    throw new Error('an id is required for the stack builder');
+  }
+  
   if(!fs.existsSync(this.options.dir)){
   	throw new Error(this.options.dir + ' does not exist');
   }
@@ -35,9 +41,10 @@ function Builder(options){
   this.nodes = {
     service:[],
     worker:[],
-    web:[],
-    config:[]
+    web:[]
   };
+
+  this.instructions = [];
 
   this.process(yaml.safeLoad(fs.readFileSync(this.filepath(), 'utf8')))
 }
@@ -58,6 +65,47 @@ Builder.prototype.process = function(doc){
     var obj = doc[key];
     obj.name = key;
 
-    self.nodes[obj.type].push(obj);
+    if(self.nodes[obj.type]){
+      self.nodes[obj.type].push(obj);  
+    }
+  })
+
+  function process_container(node){
+    if(node.container.match(/\/Dockerfile/)){
+      self.instructions.push({
+        type:'build',
+        id:self.options.id + '/' + node.name,
+        container:node.container
+      })
+
+      node.container = self.options.id + '/' + node.name;
+    }
+  }
+
+  this.nodes.service.forEach(function(service){
+
+    process_container(service);
+
+    self.instructions.push({
+      type:'ensure',
+      name:self.options.id + '/' + service.name,
+      container:service.container,
+      expose:service.expose
+    })
+  })
+
+  this.nodes.worker.forEach(function(worker){
+
+    process_container(worker);
+
+    self.instructions.push({
+      type:'deploy',
+      name:self.options.id + '/' + worker.name,
+      container:worker.container,
+      expose:worker.expose,
+      domains:worker.domains,
+      install:worker.install,
+      run:worker.run
+    })
   })
 }

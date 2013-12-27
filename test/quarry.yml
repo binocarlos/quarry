@@ -11,7 +11,7 @@ redis:
     - 6379
 
 app:
-  type: web
+  type: worker
   container: quarry/node
   install:
     - npm install
@@ -20,7 +20,7 @@ app:
     - "app.test.com"
 
 website:
-  type: web
+  type: worker
   container: quarry/node
   install:
     - npm install
@@ -36,7 +36,3 @@ service1:
   run: node ./src/worker/index.js
   expose:
     - 8791
-
-settings:
-  type: config
-  apples: 10

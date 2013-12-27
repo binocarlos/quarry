@@ -7,6 +7,7 @@ describe('quarry', function(){
 		it('should process quarry.yml', function (done) {
 	    
 	    var builder = quarry.builder({
+	    	id:'test',
 	    	dir:__dirname
 	    })
 
@@ -16,9 +17,8 @@ describe('quarry', function(){
 	    doc.mongo.expose[0].should.equal(27017);
 	    doc.redis.type.should.equal('service');
 	    doc.redis.expose[0].should.equal(6379);
-	    doc.app.type.should.equal('web');
+	    doc.app.type.should.equal('worker');
 	    doc.app.domains[0].should.equal('app.test.com');
-	    doc.settings.apples.should.equal(10);
 	    done();
 
 	  })
@@ -26,13 +26,12 @@ describe('quarry', function(){
 		it('should list the config, service, app and worker nodes', function (done) {
 	    
 	    var builder = quarry.builder({
+	    	id:'test',
 	    	dir:__dirname
 	    })
 
 	    builder.nodes.service.length.should.equal(2);
-	    builder.nodes.worker.length.should.equal(1);
-	    builder.nodes.web.length.should.equal(2);
-	    builder.nodes.config.length.should.equal(1);
+	    builder.nodes.worker.length.should.equal(3);
 
 	    done();
 	    
@@ -42,12 +41,14 @@ describe('quarry', function(){
 	  it('should have a list of launch instructions', function (done) {
 	    
 	    var builder = quarry.builder({
+	    	id:'test',
 	    	dir:__dirname
 	    })
 
+	    builder.instructions.length.should.equal(5);
 
-
-	    done();
+			builder.instructions[4].type.should.equal('deploy');
+			done();
 	    
 
 	  })

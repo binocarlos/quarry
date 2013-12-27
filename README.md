@@ -55,7 +55,7 @@ redis:
 
 # an app running node.js code
 app:
-	type: web
+	type: worker
 	container: quarry/node
 	install:
 		- cd src/app && npm install
@@ -71,13 +71,8 @@ db:
 	install:
 		- cd src/db && npm install
 	run: node src/db/index.js
-
-# values exported to the environment of each node
-settings:
-	type: config
-	include: /home/private/tokens.yml
-	speed: 10
-	color: red
+	expose:
+		- 8791
 ```
 
 
@@ -96,41 +91,8 @@ The type setting of each node decides how the rest of the config is interpreted.
 
 The type drives the quarry module system allowing other new exotic types to be added later.
 
-The current types are:
-
- * config - settings that are exposed as environment variables to nodes
  * service - nodes that are started once and remain running (e.g. database servers)
- * web - www nodes that serve HTTP requests and expose domains that are load-balanced by nginx
- * worker - backend nodes that can expose TCP ports to other nodes
- 
-### type: config
-A config node will write each value to the environment of each node in the stack.
-
-Take this config:
-
-```yaml
-settings:
-	type: config
-	include: /home/private/tokens.yml
-	speed: 10
-	color: red
-```
-
-The include field will load the contents of /home/private/tokens.yml into settings.  This is useful to include OAuth tokens that are not part of the codebase.
-
-An example of /home/private/tokens.yml
-
-```
-facebook_oauth_id: 1234
-facebook_oauth_secret: apples
-```
-
-The environment of each node in the stack will contain:
-
- * SETTINGS_SPEED = 10
- * SETTINGS_COLOR = red
- * SETTINGS_FACEBOOK_OAUTH_ID = 1234
- * SETTINGS_FACEBOOK_OAUTH_SECRET= apples
+ * worker - backend nodes that can expose TCP ports to other nodes and expose domains to the HTTP router
 
 ### nodes
 Nodes in a quarry stack are service, web or worker nodes.
@@ -228,11 +190,14 @@ This is the same pattern as the [Docker Link Command](http://docs.docker.io/en/l
 
 Other nodes in the stack can use these environment variables to connect to the services.
 
-### type: web
+### type: worker
 
-A web node is a HTTP serving process that will have traffic routed to it based on domain name.
+A worker node is a long running process that can do either of 2 things:
 
-It will have a 'domains' setting which is a list of the domains that should be routed to this web node.
+ * expose domains to the front-end HTTP router (for web-apps)
+ * expose TCP ports to other nodes in the stack (for backend workers)
+
+If a node has a 'domains' setting - the front end router will direct HTTP traffic to it.
 
 Here is an example of a web node with some domains for the router:
 
@@ -243,31 +208,23 @@ webnode:
   	- efg.com
 ```
 
-### type: worker
+Worker nodes can also expose ports like services.
 
-A worker node is any kind of process that will not be publically routed to.
+quarry comes with an etcd server running on each instance and each stack will register it's endpoints with the etcd server.
 
-Worker nodes can expose ports like service nodes can but the routing details are not written to the environment like the services.
-
-This is because worker nodes can come and go whereas services remain running.
-
-quarry comes with an etcd server running on each instance and each stack will register it endpoints with the etcd server.
-
-quarry will register the endpoints for each node with the etcd server with the following pattern:
+The pattern of etcd node registration is:
 
 	/stackname/nodename/pid
 
-So - if we have a 'mongo' service running in a 'test' stack - we can read all endpoints using:
+So - if we have a 'db' worker running in a 'test' stack - we can read all endpoints using:
 
 ```
-curl -L http://127.0.0.1:4001/v2/keys/test/mongo
+curl -L http://127.0.0.1:4001/v2/keys/test/backend
 ```
 
-The same goes for worker nodes.  Web nodes will probably want to contact worker nodes to give them work.
+Each node can access the etcd connection values from it's environment:
 
-They can listen to the etcd servers to be told about new workers coming and going.
-
-Each node will have the etcd connection values in it's environment:
+Here is an example using [Yoda](https://github.com/binocarlos/yoda) to keep track of 'backend' nodes in the stack:
 
 ```js
 var Yoda = require('yoda');
@@ -284,5 +241,3 @@ location.on('add', function(route, endpoint){
 	// here we can connect to our backend worker
 })
 ```
-
-Worker nodes also have the same ability to connect to etcd and react to other worker nodes (or event web nodes) arriving.

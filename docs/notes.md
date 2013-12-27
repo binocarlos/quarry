@@ -143,6 +143,7 @@ For each launch instruction - the grid will need to be consulted for the instanc
 
 Each instruction is one of:
 
+ * BUILD - create an image from a dockerfile
  * ENSURE - boot a container unless it is already booted
  * DEPLOY - list the currently running containers - boot news ones then stop old ones
  * SCALE - add/remove processes for a node
