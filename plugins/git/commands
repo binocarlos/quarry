@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-set -eo pipefail; [[ $DOKKU_TRACE ]] && set -x
+set -eo pipefail; [[ $QUARRY_TRACE ]] && set -x
 
 case "$1" in
   git-hook)
     APP=$2
-
     while read oldrev newrev refname
     do
       # Only run this script for the master branch. You can remove this

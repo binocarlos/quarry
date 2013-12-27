@@ -34,6 +34,14 @@ $ wget -qO- https://raw.github.com/binocarlos/quarry/master/bootstrap.sh | sudo 
 
 Do this on your local development machine and on a new cloud server - 3.8 kernel needed
 
+Generate SSH keys on your local machine and then:
+
+```
+$ cat ~/.ssh/id_rsa.pub | ssh myserver.com "sudo gitreceive upload-key user"
+```
+
+Replace 'myserver.com' with your live deploy hostname and 'me' with a tag for the key you added
+
 ## example stack
 
 A quarry.yml that boots a stack with database, web and backend nodes.

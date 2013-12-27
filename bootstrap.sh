@@ -30,4 +30,4 @@ make install
 
 echo
 echo "Almost done! For next steps on configuration:"
-echo "  https://github.com/progrium/dokku#configuring"
+echo "  https://github.com/binocarlos/quarry#configuring"

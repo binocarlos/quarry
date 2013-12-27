@@ -16,30 +16,13 @@ case "$1" in
   receive)
     APP="$2"; IMAGE="app/$APP"
     echo "-----> Cleaning up ..."
-    quarry cleanup
-    echo "-----> Building $APP ..."
-    cat | quarry build $APP
-    echo "-----> Releasing $APP ..."
-    quarry release $APP
-    echo "-----> Deploying $APP ..."
-    quarry deploy $APP
-    echo "=====> Stack deployed:"
-    echo "       $(quarry url $APP)"
+    echo "$APP - $IMAGE"
+    cat > /dev/null
     echo
     ;;
 
   build)
     APP="$2"; IMAGE="app/$APP"; CACHE_DIR="$QUARRY_ROOT/$APP/cache"
-    id=$(cat | docker run -i -a stdin quarry/base /bin/bash -c "mkdir -p /app && tar -xC /app")
-    test $(docker wait $id) -eq 0
-    docker commit $id $IMAGE > /dev/null
-    [[ -d $CACHE_DIR ]] || mkdir $CACHE_DIR
-    pluginhook pre-build $APP
-    id=$(docker run -d -v $CACHE_DIR:/cache $IMAGE /build/builder)
-    docker attach $id
-    test $(docker wait $id) -eq 0
-    docker commit $id $IMAGE > /dev/null
-    pluginhook post-build $APP
     ;;
 
   cleanup)
@@ -66,7 +49,7 @@ EOF
     ;;
 
   *)
-    for script in $(ls -d /var/lib/dokku/plugins/*/commands); do
+    for script in $(ls -d /var/lib/quarry/plugins/*/commands); do
       $script "$@"
     done
     ;;

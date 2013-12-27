@@ -2,10 +2,10 @@ QUARRY_VERSION = master
 QUARRY_ROOT ?= /home/quarry
 
 SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
-NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
 PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
+NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
 
-.PHONY: all install copyfiles version plugins dependencies sshcommand pluginhook docker aufs network test
+.PHONY: all install copyfiles version plugins pluginhook dependencies sshcommand gitreceive docker aufs network test
 
 all:
 	# Type "make install" to install.
@@ -13,7 +13,7 @@ all:
 install: dependencies copyfiles plugins version
 
 copyfiles:
-	cp quarry /usr/local/bin/quarry
+	cp quarry /usr/local/bin/quarry || true
 	mkdir -p /var/lib/quarry/plugins
 	cp -r plugins/* /var/lib/quarry/plugins
 
@@ -23,7 +23,7 @@ version:
 plugins: pluginhook docker
 	quarry plugins-install
 
-dependencies: sshcommand pluginhook docker network
+dependencies: sshcommand docker network
 
 sshcommand:
 	wget -qO /usr/local/bin/sshcommand ${SSHCOMMAND_URL}
@@ -47,7 +47,8 @@ aufs:
 	lsmod | grep aufs || modprobe aufs || apt-get install -y linux-image-extra-`uname -r`
 
 nginx-vhost:
-	wget -qO- ${NGINXVHOST_URL} | bash
+	wget -qO- ${NGINXVHOST_URL} | sudo bash
+	sleep 1
 	nginx-vhost useradd quarry
 
 # enable ipv4 forwarding
