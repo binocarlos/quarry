@@ -1,19 +1,33 @@
-set -e
+#!/usr/bin/env bash
+set -eo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export QUARRY_REPO=${QUARRY_REPO:-"https://github.com/binocarlos/quarry.git"}
-export LANGUAGE=en_US.UTF-8
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
+
+if ! which apt-get &>/dev/null
+then
+  echo "This installation script requires apt-get. For manual installation instructions, consult https://github.com/binocarlos/quarry ."
+  exit 1
+fi
 
 apt-get update
 apt-get install -y git make curl software-properties-common
-
 # this is for annoying locale issue on new DO servers
 locale-gen en_US
 
-cd ~ && test -d quarry || git clone $QUARRY_REPO
-cd ~/quarry && make all
+[[ `lsb_release -sr` == "12.04" ]] && apt-get install -y python-software-properties
 
-#echo
-#echo "Be sure to upload a public key for your user:"
-#echo "  cat ~/.ssh/id_rsa.pub | ssh root@$HOSTNAME \"gitreceive upload-key progrium\""
+cd ~ && test -d quarry || git clone $QUARRY_REPO
+cd quarry
+git fetch origin
+
+if [[ -n $QUARRY_BRANCH ]]; then
+  git checkout origin/$QUARRY_BRANCH
+elif [[ -n $QUARRY_TAG ]]; then
+  git checkout $QUARRY_TAG
+fi
+
+make install
+
+echo
+echo "Almost done! For next steps on configuration:"
+echo "  https://github.com/progrium/dokku#configuring"

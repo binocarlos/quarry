@@ -45,15 +45,9 @@ Vagrant::Config.run do |config|
       "apt-get install -y git make curl software-properties-common; " \
       "echo '-----------------------------------------------------------------------'; " \
       "echo ''; " \
-      "echo 'Can I dig it?'; " \
+      "echo 'QuarryBox is ready - SSH -> 127.0.0.1:2222'; " \
       "echo ''; " \
       "echo '-----------------------------------------------------------------------'; " \
-      "echo ''; " \
-      "echo '-----------------------------------------------------------------------'; " \
-      "echo ''; " \
-      "echo 'Yes you can!'; " \
-      "echo ''; " \
-      "echo '-----------------------------------------------------------------------'; ";
 
     config.vm.provision :shell, :inline => pkg_cmd
   end

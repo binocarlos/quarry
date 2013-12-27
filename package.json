@@ -1,0 +1,35 @@
+{
+  "name": "quarry",
+  "version": "0.0.1",
+  "description": "node.js stack deployment with docker",
+  "main": "src/index.js",
+  "preferGlobal": "true",
+  "bin": {
+    "quarry-cli": "bin/quarry-cli.js"
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "make test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/binocarlos/quarry.git"
+  },
+  "keywords": [
+    "docker",
+    "stack",
+    "deployment",
+    "cloud",
+    "deploy",
+    "lxc"
+  ],
+  "author": "Kai Davenport",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/binocarlos/quarry/issues"
+  },
+  "homepage": "https://github.com/binocarlos/quarry"
+}

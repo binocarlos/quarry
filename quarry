@@ -1,734 +1,114 @@
-#!/bin/bash
-set -e
-
-# where we run code
-export QUARRY_DEPLOY=${QUARRY_APPS:="$HOME/quarryapps"}
-
-# where we keep persistent data
-export QUARRY_RUNTIME=${QUARRY_RUNTIME:="$HOME/quarryruntime"}
-
-# 128MB
-export memorylimit=134217728
-# 64MB
-#export memorylimit=67108864
-# 32MB
-#export memorylimit=33554432
-
-########################################################################
-#
-#
-#
-# app env
-#
-#
-#
-########################################################################
-
-# get the vars and folders setup for one app
-function initialize_app(){
-
-  SOURCE_FOLDER=$1
-
-  # if we just run right off the bat then we are running from the current folder
-  if [[ -z $SOURCE_FOLDER ]]; then
-    SOURCE_FOLDER=`pwd`
-  fi
-
-  # make sure we have a deploy id that is different each time
-  if [[ -z $DEPLOYID ]]; then
-    random_id
-    DEPLOYID=$RANDOMID
-  fi
-
-  # the name of the app is the folder it is in
-  APP_NAME=$(echo $SOURCE_FOLDER | awk -F/ '{print $(NF)}' | sed -r 's/-//')
-
-  RUNTIME_FOLDER="$QUARRY_RUNTIME/$APP_NAME"
-
-  SERVICES_FOLDER="$RUNTIME_FOLDER/services"
-  NODES_FOLDER="$RUNTIME_FOLDER/nodes"
-  ROOT_DATA_FOLDER="$RUNTIME_FOLDER/data"
-  ENV_FOLDER="$RUNTIME_FOLDER/env"
-
-  mkdir -p $SERVICES_FOLDER
-  mkdir -p $NODES_FOLDER
-  mkdir -p $ROOT_DATA_FOLDER
-  mkdir -p $ENV_FOLDER
-  
-  # the file listing the domains for this app
-  # we use hipache to route to here
-  DOMAINS_FILE="$SOURCE_FOLDER/domains"
-
-  if [[ ! -f $DOMAINS_FILE ]]; then
-    DOMAINS_FILE="$SOURCE_FOLDER/.quarry/domains"
-  fi
-
-  # how we will boot the app
-  BOOT_COMMAND="/usr/bin/node index.js"
-}
-
-# write out an apps nginx config
-function write_nginx(){
-  domains_string=$(cat $DOMAINS_FILE | sed ':a;N;$!ba;s/\n/ /g')
-
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  echo "nginx domains"
-  echo $domains_string
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-
-  if [[ -f "/home/git/nginx/$APP_NAME.conf" ]]; then
-    file_existed=1
-  fi
-
-  cat<<EOF > /home/git/nginx/$APP_NAME.conf
-upstream $APP_NAME { 
-  server $apphost:$appport;
-}
-
-server {
-  listen      80;
-  server_name $domains_string;
-  location    / {
-    proxy_pass  http://$APP_NAME;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host \$http_host;
-    proxy_set_header X-Forwarded-For \$remote_addr;
-  }
-}
-EOF
-
-  if [[ -z $file_existed ]]; then
-    chgrp admin /home/git/nginx/$APP_NAME.conf
-  fi
-}
-
-# if running a live git deploy - we can restart nginx
-# otherwise we need a manual restart
-function restart_nginx(){
-  
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  echo "reloading nginx"
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  sudo service nginx reload
-
-}
-
-
-
-########################################################################
-#
-#
-#
-# tools
-#
-#
-#
-########################################################################
-
-function ensure_root(){
-  if [ "$(id -u)" != "0" ]; then
-   echo "This script must be run as root" 1>&2
-   exit 1
-  fi
-}
-
-function random_id(){
-  RANDOMID=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1`  
-}
-
-# generate a random, unused port
-function generate_port(){
-  RANDOM_PORT=`shuf -i 2000-65000 -n 1`;
-  if [[ -n `netstat -ant | grep :$RANDOM_PORT` ]]; then
-    wait 1
-    generate_port
-  fi
-}
-
-# return the IP of a given container id
-function container_ip(){
-  CONTAINER_IP=`docker inspect $1 | grep IPAddress | sed -r 's/\s+"IPAddress": "(([0-9]{1,3}\.){3}[0-9]{1,3})",/\1/'`
-}
-
-# list the containers that are status Exit
-function dead_containers(){
-  DEAD_CONTAINERS=`docker ps -a | grep Exit | awk '{ print $1 }'`
-}
-
-# get the internal port for a service
-function service_port(){
-  if [[ "$1" == "mongo" ]]; then
-    SERVICE_PORT=27017
-  elif [[ "$1" == "redis" ]]; then
-    SERVICE_PORT=6379
-  elif [[ "$1" == "etcd" ]]; then
-    SERVICE_PORT=4001
-  else
-    SERVICE_PORT=""
-  fi
-}
-
-function service_expose_port(){
-  service_port $1
-  EXPOSE_SERVICE_PORT=" -p $SERVICE_PORT:$SERVICE_PORT"
-}
-
-function get_env_string(){
-
-  ENV_STRING=""
-
-  # we loop each of the services needed in the stack
-  for i in $ENV_FOLDER/* ; do
-
-    # each service represents itself as a file named after the service
-    if [ -f "$i" ]; then
-      envname=$(echo $i | awk -F/ '{print $(NF)}')
-      envvalue=$(cat $i)
-      ENV_STRING="$ENV_STRING -e $envname=$envvalue"
-    fi
-
-  done
-}
-
-########################################################################
-#
-#
-#
-# env
-#
-#
-#
-########################################################################
-
-function write_env(){
-  
-  echo $APP_NAME > $ENV_FOLDER/DIGGER_APP_NAME
-  echo $RUNTIME_FOLDER > $ENV_FOLDER/DIGGER_RUNTIME_FOLDER
-  echo $ROOT_DATA_FOLDER > $ENV_FOLDER/DIGGER_ROOT_DATA_FOLDER
-
-}
-
-########################################################################
-#
-#
-#
-# services
-#
-#
-#
-########################################################################
-
-function boot_services(){
-
-  expose_flag=$1
-
-  ########################################################################
-  ########################################################################
-  ########################################################################
-  ## SERVICES
-
-  # we loop each of the services needed in the stack
-  for i in $SOURCE_FOLDER/.quarry/services/* ; do
-
-    # each service represents itself as a file named after the service
-    if [ -f "$i" ]; then
-
-      # grab the name of the service off the end of the file -> /dfdf/dfdf/mongo -> mongo
-      servicename=$(echo $i | awk -F/ '{print $(NF)}')
-      echo "ensuring service: $servicename"
-
-      # read the contents of the service file - this might be a container we have already run
-      containerfile=$RUNTIME_FOLDER/services/${servicename^^}
-      hostfile=$RUNTIME_FOLDER/services/${servicename^^}_HOST
-      portfile=$RUNTIME_FOLDER/services/${servicename^^}_PORT
-
-      containerid=''
-
-      if [[ -f $containerfile ]]; then
-        containerid=$(cat $containerfile);
-      fi
-
-      exposest=""
-
-      service_port $servicename
-
-      if [[ ! -z $expose_flag ]]; then
-        exposest=" -p $SERVICE_PORT:$SERVICE_PORT"
-        containerid=""
-      fi
-
-      # there is no container recorded - create the service
-      if [[ -z $containerid ]]; then
-
-        # what internal port does this service run on
-        
-        datafolder=$ROOT_DATA_FOLDER/$servicename
-
-        mkdir -p $datafolder
-
-
-        # run the service container
-        # write the container id to the $containerfile
-        # mount a volume -> runtime/data/redis
-        containerid=$(docker run -d -v $datafolder:/data/db $exposest -t quarrystack/$servicename)
-
-        container_ip $containerid
-    
-        #dockerserviceport=$(docker port $containerid $SERVICE_PORT)
-
-        dockerserviceport=$SERVICE_PORT
-        dockerservicehost=$CONTAINER_IP
-
-        # write the container id and port to the runtime
-        echo $containerid > $containerfile
-        echo $dockerservicehost > $hostfile
-        echo $dockerserviceport > $portfile
-
-      else
-        dockerrunning=$(docker ps | grep $containerid | awk '{print $1}')
-        # we have had a container but it is not running - start it up
-        if [[ -z $dockerrunning ]]; then
-          docker start $containerid
-          echo "service restarting"
-        else
-          echo "service already running"
-        fi
-
-        container_ip $containerid
-        dockerserviceport=$SERVICE_PORT
-        dockerservicehost=$CONTAINER_IP
-      fi
-
-      # write the service details to the env
-      envname=digger_${servicename}_host
-      echo $dockerservicehost > $ENV_FOLDER/${envname^^}
-
-      envname=digger_${servicename}_port
-      echo $dockerserviceport > $ENV_FOLDER/${envname^^}
-
-      echo "service:                $servicename"
-      echo "  * container:          $containerid"
-      echo "  * host:               $dockerservicehost"
-      echo "  * port:               $dockerserviceport"
-
-      # the contents of the file is the container idc
-    fi
-  done
-}
-
-########################################################################
-#
-#
-#
-# build
-#
-#
-#
-########################################################################
-
-function build_digger(){
-    # digger app
-  echo "SOURCE FOLDER: $SOURCE_FOLDER"
-
-  echo "compiling digger app $APP_NAME"
-
-  #rm -rf $SOURCE_FOLDER/.quarry
-
-  # remove the .quarry folder before we build - this is done in a container for permissions
-  #docker run -a=stdout -v $SOURCE_FOLDER:/srv/quarryapp -w /srv/quarryapp -t quarrystack/digger rm -rf .quarry
-
-  # build the digger app into the .quarry folder - we can study the files after
-  # the build is a read only because the files are root inside the container
-  random_id
-  mkdir -p /tmp/quarrybuild
-  cp -r $SOURCE_FOLDER /tmp/quarrybuild/$RANDOMID
-
-  docker run -a=stdout -v /tmp/quarrybuild/$RANDOMID:/srv/quarryapp -w /srv/quarryapp -t quarrystack/digger rm -rf .quarry
-  docker run -a=stdout -v /tmp/quarrybuild/$RANDOMID:/srv/quarryapp -w /srv/quarryapp -t quarrystack/digger digger build
-
-  cp -r /tmp/quarrybuild/$RANDOMID/.quarry $SOURCE_FOLDER/.quarry
-
-  sudo rm -rf /tmp/quarrybuild/$RANDOMID
-}
-
-function build_image(){
-  ########################################################################
-  ########################################################################
-  ########################################################################
-  ## BUILD
-
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  echo "creating Dockerfile for app: $SOURCE_FOLDER/Dockerfile"
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-
-  # make an image out of the app
-  cat<<EOF > $SOURCE_FOLDER/Dockerfile
-from quarrystack/digger
-
-# this clears the docker cache
-run echo "$DEPLOYID" > /tmp/quarrydeploy
-
-# add the apps code to the image
-add . /srv/quarryapp
-
-# install the npm modules
-run test -f /srv/quarryapp/package.json || echo '{}' > /srv/quarryapp/package.json
-run cd /srv/quarryapp && rm -rf /srv/quarryapp/node_modules && NODE_ENV=production npm install
-EOF
-
-  DEPLOY_IMAGE="$APP_NAME/app"
-
-  # make an image out of the git commit id - this will have installed the node modules
-  docker build -t $DEPLOY_IMAGE $SOURCE_FOLDER
-
-  rm -f $SOURCE_FOLDER/Dockerfile
-}
-
-
-function run_node_container(){
-  nodename=$1
-  nodefile=$SOURCE_FOLDER/.quarry/nodes/$nodename
-  echo "booting node: $nodename"
-
-  ########################################################################
-  ########################################################################
-  ########################################################################
-  ## NOW THE APP
-
-  # any containers we find already running we will clear at the end
-  # once we have changed the front end routing
-  
-  BOOT_COMMAND=$(cat $nodefile)
-
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  echo "booting node $nodename: $BOOT_COMMAND"
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  appcontainerfile=$RUNTIME_FOLDER/nodes/${nodename^^}
-  apphostfile=$RUNTIME_FOLDER/nodes/${nodename^^}_HOST
-  appportfile=$RUNTIME_FOLDER/nodes/${nodename^^}_PORT
-
-  appcontainerid=''
-
-  # the node already exists - get its container id and add to the kill list
-  if [[ -f $appcontainerfile ]]; then
-    appcontainerid=$(cat $appcontainerfile)
-    #KILL_CONTAINERS+=("$appcontainerid")
-    KILL_CONTAINER=$appcontainerid
-  fi
-
-  echo "running boot: $BOOT_COMMAND"
-  echo "on container: $APP_NAME/app"
-
-  # make one string that has all of the env in one docker command string
-  get_env_string
-
-  # -m $memorylimit 
-  dockercommand="docker run -i $ENV_STRING -w /srv/quarryapp -t $APP_NAME/app mon \"$BOOT_COMMAND\""
-
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  echo "$dockercommand"
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-
-  #  -m $memorylimit
-  appcontainerid=$(docker run -d $ENV_STRING -w /srv/quarryapp -t $APP_NAME/app mon "$BOOT_COMMAND")
-
-  # get the ip of the new container
-  container_ip $appcontainerid
-
-  apphost=$CONTAINER_IP
-  appport=80
-
-  # write the container id and port to the runtime
-  echo $appcontainerid > $appcontainerfile
-  echo $apphost > $apphostfile
-  echo $appport > $appportfile      
-
-  echo ""
-  echo "--------------------------------------------"
-  echo ""
-  echo "$APP_NAME is created:"
-  echo "  * container:          $appcontainerid"
-  echo "  * host:               $apphost"
-  echo "  * port:               $appport"
-  echo ""
-  echo "--------------------------------------------"
-  echo ""
-}
-
-
-function run_app_containers(){
-
-  # these are the old containers we kill after
-  #KILL_CONTAINERS=()
-
-  # we loop each of the services needed in the stack
-  for i in $SOURCE_FOLDER/.quarry/nodes/* ; do
-
-    # each service represents itself as a file named after the service
-    if [ -f "$i" ]; then
-
-      # grab the name of the service off the end of the file -> /dfdf/dfdf/mongo -> mongo
-      nodename=$(echo $i | awk -F/ '{print $(NF)}')
-      run_node_container $nodename
-    fi
-  done
-}
-
-########################################################################
-#
-#
-#
-# main run method
-#
-#
-#
-########################################################################
-
-function run_app(){
-
-  sourcefolder=$1
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  echo "Can I dig it?"
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-
-  initialize_app $sourcefolder
-  
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-  echo "Yes you can!"
-  echo ""
-  echo "---------------------------------------------------"
-  echo ""
-
-  build_digger
-  
-  build_image
-
-  boot_services
-
-  write_env
-  
-  run_app_containers
-  
-  write_nginx
-  restart_nginx
-
-  # wait a few seconds to let the app sort itself out
-  echo ""
-  echo "waiting for app to boot..."
-  sleep 3
-  echo ""
-  echo "OK..."
-
-  if [[ ! -z $KILL_CONTAINER ]]; then
-    echo ""
-    echo "--------------------------------------------"
-    echo ""
-    echo "killing old container: $KILL_CONTAINER"
-    docker stop $KILL_CONTAINER
-  fi
-
-  echo ""
-  echo "--------------------------------------------"
-  echo ""
-  echo "all booted captain - she's a goodun!"
-  echo ""
-  echo ""
-
-  while read domain; do
-    echo "  $domain"
-  done < $DOMAINS_FILE
-
-  echo ""
-  echo ""
-
-}
+#!/usr/bin/env bash
+set -eo pipefail
+export QUARRY_ROOT=${QUARRY_ROOT:="/home/quarry"}
+export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/quarry/plugins"}
+
+[[ -f $QUARRY_ROOT/quarryrc ]] && source $QUARRY_ROOT/quarryrc
+
+[[ $QUARRY_TRACE ]] && set -x
+
+if [[ $(id -un) != "quarry" && $1 != "plugins-install" ]]; then
+  sudo -u quarry -H $0 "$@"
+  exit
+fi
 
 case "$1" in
   receive)
-    APP="$2";
-
-    # fetch the git head to use as the deploy id
-    DEPLOYID=$(cd ~/$APP && git rev-parse HEAD | cut -c -8);
-
-    sourcefolder=$QUARRY_DEPLOY/$APP
-    rm -rf $sourcefolder
-    mkdir -p $sourcefolder
-    # move the input (tar) into where we want it on the filesystem
-    # this is run from a gitreceive
-    
-    echo "-----> Uploading $APP - $DEPLOYID -> $sourcefolder"
-    cat | tar -xC $sourcefolder
-    
-    echo "-----> Running $APP ..."
-    run_app $sourcefolder
+    APP="$2"; IMAGE="app/$APP"
+    echo "-----> Cleaning up ..."
+    quarry cleanup
+    echo "-----> Building $APP ..."
+    cat | quarry build $APP
+    echo "-----> Releasing $APP ..."
+    quarry release $APP
+    echo "-----> Deploying $APP ..."
+    quarry deploy $APP
+    echo "=====> Stack deployed:"
+    echo "       $(quarry url $APP)"
+    echo
     ;;
 
-  # run an app
-  # if passed a folder then that is what we are running
-  # otherwise we assume the current folder is the app
-  run)
-  
-    run_app
-
+  build)
+    APP="$2"; IMAGE="app/$APP"; CACHE_DIR="$QUARRY_ROOT/$APP/cache"
+    id=$(cat | docker run -i -a stdin quarry/base /bin/bash -c "mkdir -p /app && tar -xC /app")
+    test $(docker wait $id) -eq 0
+    docker commit $id $IMAGE > /dev/null
+    [[ -d $CACHE_DIR ]] || mkdir $CACHE_DIR
+    pluginhook pre-build $APP
+    id=$(docker run -d -v $CACHE_DIR:/cache $IMAGE /build/builder)
+    docker attach $id
+    test $(docker wait $id) -eq 0
+    docker commit $id $IMAGE > /dev/null
+    pluginhook post-build $APP
     ;;
 
-  # develop an app
-  # gets the services booted and builds but runs the app interactive
-  # and does not mess with nginx
-  develop)
+  release)
+    APP="$2"; IMAGE="app/$APP"
+    pluginhook pre-release $APP
+    if [[ -f "$DOKKU_ROOT/$APP/ENV" ]]; then
+      id=$(cat "$DOKKU_ROOT/$APP/ENV" | docker run -i -a stdin $IMAGE /bin/bash -c "mkdir -p /app/.profile.d && cat > /app/.profile.d/app-env.sh")
+      test $(docker wait $id) -eq 0
+      docker commit $id $IMAGE > /dev/null
+    fi
+    pluginhook post-release $APP
+    ;;
 
-    mode=$2
+  deploy)
+    APP="$2"; IMAGE="app/$APP"
+    pluginhook pre-deploy $APP
 
-    sudo service nginx stop
-    
-    initialize_app
-    
-    #build_digger
-
-    boot_services
-
-    write_env
-
-    #nodename=all
-    #nodefile=$SOURCE_FOLDER/.quarry/nodes/$nodename
-    #echo "booting node: $nodename"
-
-    ########################################################################
-    ########################################################################
-    ########################################################################
-    ## NOW THE APP
-
-    # any containers we find already running we will clear at the end
-    # once we have changed the front end routing
-    
-    #BOOT_COMMAND=$(cat $nodefile)
-
-    #echo "running boot: $BOOT_COMMAND"
-
-    # make one string that has all of the env in one docker command string
-    get_env_string
-
-    echo "ENV:"
-    echo
-    echo "$ENV_STRING"
-    echo
-    
-    ## this is for the root digger developers to be able to test a stack + the local digger code
-    ROOT_VOLUMES=""
-    if [[ $mode == "root" ]]; then
-      ROOT_VOLUMES=" -v /srv/projects:/srv/projects -v /usr/lib/node_modules:/usr/lib/node_modules "
-      echo "ROOT VOLUMES:"
-      echo
-      echo $ROOT_VOLUMES
-      echo
+    # kill the app when running
+    if [[ -f "$DOKKU_ROOT/$APP/CONTAINER" ]]; then
+      oldid=$(< "$DOKKU_ROOT/$APP/CONTAINER")
+      docker kill $oldid > /dev/null 2>&1 || true
     fi
 
-    st="docker run -i $ROOT_VOLUMES $ENV_STRING -v $SOURCE_FOLDER:/srv/quarryapp -p 80:80 -w /srv/quarryapp -t quarrystack/digger digger run"
-    echo
-    echo "-------------------------------------------------------------------------"
-    echo $st
-    echo "-------------------------------------------------------------------------"
-    echo
-    docker run -i $ROOT_VOLUMES $ENV_STRING -v $SOURCE_FOLDER:/srv/quarryapp -p 80:80 -w /srv/quarryapp -t quarrystack/digger digger run
+    # start the app
+    DOCKER_ARGS=$(: | pluginhook docker-args $APP)
+    id=$(docker run -d -p 5000 -e PORT=5000 $DOCKER_ARGS $IMAGE /bin/bash -c "/start web")
+    echo $id > "$DOKKU_ROOT/$APP/CONTAINER"
+    port=$(docker port $id 5000 | sed 's/0.0.0.0://')
+    echo $port > "$DOKKU_ROOT/$APP/PORT"
+    echo "http://$(< "$DOKKU_ROOT/HOSTNAME"):$port" > "$DOKKU_ROOT/$APP/URL"
+
+    pluginhook post-deploy $APP $port
     ;;
 
-  # boot the services but mounted on a local port
-  # this lets us do local development without needing to install servers
-  devservices)
-    sudo service nginx stop
-    
-    initialize_app
-
-    boot_services yes
+  cleanup)
+    # delete all non-running container
+    docker ps -a | grep 'Exit' |  awk '{print $1}' | xargs docker rm &> /dev/null &
+    # delete unused images
+    docker images | grep '<none>' |  awk '{print $3}'  | xargs docker rmi &> /dev/null &
     ;;
 
-  devmongo)
-    docker run -i -t -entrypoint "/bin/bash" quarrystack/mongo
+  plugins)
+    ls -1 -d $PLUGIN_PATH/*/
     ;;
 
-  connect)
-    initialize_app
-    servicename=$2
-    echo "connecting service: $servicename"
-    if [[ -z $servicename ]]; then
-      echo "usage: quarry connect <servicename>";
-      exit
-    fi
-    # read the contents of the service file - this might be a container we have already run
-    containerfile=$RUNTIME_FOLDER/services/${servicename^^}
-    container=`cat $containerfile`
-    container_ip $container
-
-    if [[ $servicename == "mongo" ]]; then
-      docker run -i -entrypoint "/usr/bin/mongo" -t quarrystack/mongo --host=$CONTAINER_IP  
-    elif [[ $servicename == "redis" ]]; then
-      docker run -i -entrypoint "/usr/bin/redis-cli" -t quarrystack/redis -h $CONTAINER_IP
-    fi
-    ;;
-
-  ps)
-    # we loop each of the services needed in the stack
-    for i in $QUARRY_DEPLOY/* ; do
-
-      # each service represents itself as a file named after the service
-      if [ -d "$i" ]; then
-
-        # grab the name of the service off the end of the file -> /dfdf/dfdf/mongo -> mongo
-        appname=$(echo $i | awk -F/ '{print $(NF)}')
-
-        echo
-        echo "$appname"
-
-      fi
-
-    done
+  plugins-install)
+    pluginhook install
     ;;
 
   # temporary hack for https://github.com/progrium/dokku/issues/82
   deploy:all)
-    #for app in $(ls -d $HOME/*/); do
-    #  APP=$(basename $app);
-    #  IMAGE="app/$APP"
-    #  dokku deploy $APP $IMAGE
-    #done
+    for app in $(ls -d $DOKKU_ROOT/*/); do
+      APP=$(basename $app);
+      dokku deploy $APP
+    done
     ;;
 
   help)
-    cat<<EOF | sort
-    help                  Print the list of commands
+    cat<<EOF | pluginhook commands help | sort
+    help            Print the list of commands
+    plugins         Print active plugins
+    plugins-install Install active plugins
 EOF
     ;;
 
   *)
-    quarry help
+    for script in $(ls -d /var/lib/dokku/plugins/*/commands); do
+      $script "$@"
+    done
     ;;
 
 esac
