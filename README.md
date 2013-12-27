@@ -162,8 +162,6 @@ Here is a node that is running from a custom Docker container build:
 custom_nodejs_worker:
 	type: worker
 	container ./src/worker/Dockerfile
-	install: cd src/worker && npm install
-  run: node src/worker/index.js
 ```
 
 and the contents of ./src/worker/Dockerfile
@@ -172,6 +170,9 @@ and the contents of ./src/worker/Dockerfile
 FROM quarry/node
 RUN apt-get install some-funky-dep
 RUN useradd some-funky-user-thing
+ADD . /srv/workerapp
+EXPOSE 8791
+ENTRYPOINT ["node", "/srv/workerapp/index.js"]
 ```
 
 The [Dockerfile Reference](http://docs.docker.io/en/latest/use/builder) is a good place to learn about Dockerfile commands.

@@ -27,3 +27,16 @@ website:
   run: node ./src/website/index.js
   domains:
     - "www.test.com"
+
+service1:
+  type: worker
+  container: quarry/node
+  install:
+    - npm install
+  run: node ./src/worker/index.js
+  expose:
+    - 8791
+
+settings:
+  type: config
+  apples: 10

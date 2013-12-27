@@ -32,7 +32,14 @@ function Builder(options){
   	throw new Error(this.filepath() + ' does not exist');
   }
 
-  this.doc = yaml.safeLoad(fs.readFileSync(this.filepath(), 'utf8'));
+  this.nodes = {
+    service:[],
+    worker:[],
+    web:[],
+    config:[]
+  };
+
+  this.process(yaml.safeLoad(fs.readFileSync(this.filepath(), 'utf8')))
 }
 
 util.inherits(Builder, EventEmitter);
@@ -41,4 +48,16 @@ module.exports = Builder;
 
 Builder.prototype.filepath = function(){
 	return this.options.dir + '/quarry.yml';
+}
+
+Builder.prototype.process = function(doc){
+  var self = this;
+  this.doc = doc;
+
+  Object.keys(this.doc).forEach(function(key){
+    var obj = doc[key];
+    obj.name = key;
+
+    self.nodes[obj.type].push(obj);
+  })
 }
