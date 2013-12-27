@@ -1,0 +1,29 @@
+mongo:
+  type: service
+  container: quarry/mongo
+  expose:
+    - 27017
+
+redis:
+  type: service
+  container: quarry/redis
+  expose:
+    - 6379
+
+app:
+  type: web
+  container: quarry/node
+  install:
+    - npm install
+  run: node ./src/app/index.js
+  domains:
+    - "app.test.com"
+
+website:
+  type: web
+  container: quarry/node
+  install:
+    - npm install
+  run: node ./src/website/index.js
+  domains:
+    - "www.test.com"

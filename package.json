@@ -31,5 +31,12 @@
   "bugs": {
     "url": "https://github.com/binocarlos/quarry/issues"
   },
-  "homepage": "https://github.com/binocarlos/quarry"
+  "homepage": "https://github.com/binocarlos/quarry",
+  "devDependencies": {
+    "mocha": "~1.14.0",
+    "should": "~2.1.0"
+  },
+  "dependencies": {
+    "js-yaml": "~3.0.1"
+  }
 }

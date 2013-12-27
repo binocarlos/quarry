@@ -5,7 +5,7 @@ SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
 NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
 PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
 
-.PHONY: all install copyfiles version plugins dependencies sshcommand pluginhook docker aufs network
+.PHONY: all install copyfiles version plugins dependencies sshcommand pluginhook docker aufs network test
 
 all:
 	# Type "make install" to install.
@@ -56,3 +56,12 @@ network:
 	sleep 1
 	service docker restart
 	sleep 1
+
+test:
+	@echo server test
+	@NODE_ENV=test ./node_modules/.bin/mocha \
+		--reporter spec \
+		--timeout 300 \
+		--require should \
+		--growl \
+		test/test.js

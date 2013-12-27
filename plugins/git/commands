@@ -10,7 +10,7 @@ case "$1" in
       # Only run this script for the master branch. You can remove this
       # if block if you wish to run it for others as well.
       if [[ $refname = "refs/heads/master" ]] ; then
-        git archive $newrev | dokku receive $APP | sed -u "s/^/"$'\e[1G'"/"
+        git archive $newrev | quarry receive $APP | sed -u "s/^/"$'\e[1G'"/"
       fi
 
     done
@@ -18,7 +18,7 @@ case "$1" in
 
   git-*)
     APP="$(echo $2 | perl -pe 's/(?<!\\)'\''//g' | sed 's/\\'\''/'\''/g')"
-    APP_PATH=$DOKKU_ROOT/$APP
+    APP_PATH=$QUARRY_ROOT/$APP
 
     if [[ $1 == "git-receive-pack" && ! -d $APP_PATH ]]; then
         git init --bare $APP_PATH > /dev/null
@@ -26,7 +26,7 @@ case "$1" in
         cat > $PRERECEIVE_HOOK <<EOF
 #!/usr/bin/env bash
 set -e; set -o pipefail;
-cat | DOKKU_ROOT="$DOKKU_ROOT" dokku git-hook $APP
+cat | QUARRY_ROOT="$QUARRY_ROOT" quarry git-hook $APP
 EOF
         chmod +x $PRERECEIVE_HOOK
     fi

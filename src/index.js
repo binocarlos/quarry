@@ -16,29 +16,9 @@
   Module dependencies.
 */
 
-var EventEmitter = require('events').EventEmitter;
-var fs = require('fs');
-var yaml = require('js-yaml');
-var util = require('util');
-
-function Builder(options){
-  EventEmitter.call(this);
-  this.options = options || {};
-  if(!fs.existsSync(this.options.dir)){
-  	throw new Error(this.options.dir + ' does not exist');
-  }
-
-  if(!fs.existsSync(this.filepath())){
-  	throw new Error(this.filepath() + ' does not exist');
-  }
-
-  this.doc = yaml.safeLoad(fs.readFileSync(this.filepath(), 'utf8'));
-}
-
-util.inherits(Builder, EventEmitter);
-
-module.exports = Builder;
-
-Builder.prototype.filepath = function(){
-	return this.options.dir + '/quarry.yml';
+module.exports = {
+	builder:function(options){
+		var Builder = require('./builder');
+		return new Builder(options);
+	}
 }

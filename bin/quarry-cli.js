@@ -5,6 +5,7 @@
  */
 var version = require(__dirname + '/../package.json').version;
 var program = require('commander');
+var quarry = require('../src');
 
 program
   .option('-d, --dir <string>', 'the folder the quarry.yml file lives in', '.')
