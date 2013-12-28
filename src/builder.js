@@ -19,6 +19,7 @@
 var EventEmitter = require('events').EventEmitter;
 var fs = require('fs');
 var yaml = require('js-yaml');
+var wrench = require('wrench');
 var util = require('util');
 
 function Builder(options){
@@ -40,13 +41,12 @@ function Builder(options){
 
   this.nodes = {
     service:[],
-    worker:[],
-    web:[]
+    worker:[]
   };
 
   this.instructions = [];
 
-  this.process(yaml.safeLoad(fs.readFileSync(this.filepath(), 'utf8')))
+  this.process(yaml.safeLoad(fs.readFileSync(this.filepath(), 'utf8')));
 }
 
 util.inherits(Builder, EventEmitter);
@@ -55,6 +55,18 @@ module.exports = Builder;
 
 Builder.prototype.filepath = function(){
 	return this.options.dir + '/quarry.yml';
+}
+
+Builder.prototype.build = function(output){
+  var self = this;
+  
+  this.nodes.service.forEach(function(service){
+    console.log(JSON.stringify(service, null, 4));
+  })
+
+  this.nodes.worker.forEach(function(worker){
+    console.log(JSON.stringify(worker, null, 4));
+  })
 }
 
 Builder.prototype.process = function(doc){

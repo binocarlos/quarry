@@ -24,24 +24,55 @@ case "$1" in
     ;;
 
   build)
-    APP="$2"; IMAGE="app/$APP"; CACHE_DIR="$QUARRY_ROOT/$APP/cache"
-    id=$(cat | docker run -i -a stdin quarry/base /bin/bash -c "mkdir -p /app && tar -xC /app")
-    test $(docker wait $id) -eq 0
-    docker commit $id $IMAGE > /dev/null
-    [[ -d $CACHE_DIR ]] || mkdir $CACHE_DIR
-    pluginhook pre-build $APP
-    id=$(docker run $IMAGE node /opt/quarry/bin/quarry-cli build $APP /app)
-    echo $id
+    APP="$2"; IMAGE="app/$APP"; APP_DIR="$QUARRY_ROOT/$APP";
+    # incoming tar stream -> /home/quarry/appname/src.tar
+    mkdir -p $APP_DIR/src
+    cat > $APP_DIR/src.tar
+    cat $APP_DIR/src.tar | tar -xC $APP_DIR/src
+    #tar -xf $APP_DIR/src.tar
+    
+    #id=$(cat $SRC_DIR.tar | docker run -i -a stdin quarry/base /bin/bash -c "mkdir -p /app && tar -xC /app")
+    #test $(docker wait $id) -eq 0
+    #docker commit $id $IMAGE > /dev/null
+    #[[ -d $BUILD_DIR ]] || mkdir $BUILD_DIR
+    #pluginhook pre-build $APP
+    #rm -rf $BUILD_DIR/app
+    #docker cp $id:/app $BUILD_DIR
+    #id=$(docker run -d -v $BUILD_DIR:/build $IMAGE node /opt/quarry/bin/quarry-cli build $APP /build/app /build)
     #docker attach $id
     #test $(docker wait $id) -eq 0
     #docker commit $id $IMAGE > /dev/null
     #pluginhook post-build $APP
     ;;
 
+  service)
+    NAME="$2";
+    case "$NAME" in
+      etcd)
+        running=$(docker ps | grep etcd | awk '{ print $1 }')
+        if [[ -z $running ]]; then
+          docker run -name "etcd" -d -p 4001:4001 -p 7001:7001 quarry/etcd
+        fi
+      ;;
+      registry)
+        running=$(docker ps | grep registry | awk '{ print $1 }')
+        if [[ -z $running ]]; then
+          docker run -name "registry" -d -p 5000:5000 samalba/docker-registry 
+        fi
+      ;;
+    esac
+    ;;
+
   testbuild)
     APP="$2";
     SOURCE_FOLDER=`pwd`
-    tar -c . | quarry build $APP
+    tar --exclude=.git -c . | quarry build $APP
+    ;;
+
+  core)
+    SERVICE="$2";
+    id=$(docker ps )
+
     ;;
 
   cleanup)

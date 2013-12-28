@@ -10,7 +10,7 @@ NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap
 all:
 	# Type "make install" to install.
 
-install: dependencies copyfiles plugins version
+install: dependencies copyfiles plugins services quarry-base version
 
 copyfiles:
 	cp quarry /usr/local/bin/quarry || true
@@ -22,6 +22,14 @@ version:
 
 plugins: pluginhook docker
 	quarry plugins-install
+
+services: docker registry etcd
+
+registry:
+	quarry service registry
+
+etcd:
+	quarry service etcd
 
 dependencies: sshcommand docker network
 

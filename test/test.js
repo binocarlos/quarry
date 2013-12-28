@@ -23,7 +23,7 @@ describe('quarry', function(){
 
 	  })
 
-		it('should list the config, service, app and worker nodes', function (done) {
+		it('should list the service and worker nodes', function (done) {
 	    
 	    var builder = quarry.builder({
 	    	id:'test',
@@ -34,19 +34,6 @@ describe('quarry', function(){
 	    builder.nodes.worker.length.should.equal(3);
 
 	    done();
-	    
-
-	  })
-
-	  it('should have a list of launch instructions', function (done) {
-	    
-	    var builder = quarry.builder({
-	    	id:'test',
-	    	dir:__dirname
-	    })
-
-	    console.dir(builder.instructions);
-			done();
 	    
 
 	  })

@@ -1,5 +1,5 @@
 {
-  "name": "quarry",
+  "name": "quarry-builder",
   "version": "0.0.1",
   "description": "node.js stack deployment with docker",
   "main": "src/index.js",
@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "js-yaml": "~3.0.1",
-    "commander": "~2.1.0"
+    "commander": "~2.1.0",
+    "wrench": "~1.5.4"
   }
 }

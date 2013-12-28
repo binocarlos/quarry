@@ -12,7 +12,7 @@ program
 
 program
   .command('build [id] [input]')
-  .description('build an app folder into quarry launch file')
+  .description('generate launch instructions for a stack')
   .action(function(id, input){
 
     var builder = quarry.builder({
@@ -20,8 +20,12 @@ program
       dir:input
     })
 
+    builder.build(output, function(){
+      
+    })
 
-    console.dir(builder.instructions);
+    
+    
     
   })
 
