@@ -20,6 +20,7 @@ var EventEmitter = require('events').EventEmitter;
 var fs = require('fs');
 var yaml = require('js-yaml');
 var wrench = require('wrench');
+var path = require('path');
 var util = require('util');
 
 function Builder(options){
@@ -58,16 +59,28 @@ Builder.prototype.filepath = function(){
 }
 
 Builder.prototype.process_node = function(folder, node){
+  var self = this;
   if(node.container.indexOf('.')==0){
+    var node_src_folder = path.normalize(self.options.dir + '/' + node.container);
 
+    wrench.copyDirSyncRecursive(node_src_folder, folder + '/src');
+  }
+
+  if(node.domains && node.domains.length>0){
+    if(!node.expose){
+      node.expose = [];
+    }
+    var existing = node.expose.filter(function(port){
+      return port==80;
+    })
+    if(existing.length<0){
+      node.expose.push(80);
+    }
+    fs.writeFileSync(folder + '/domains', node.domains.join(" "), 'utf8');  
   }
 
   if(node.expose && node.expose.length>0){
     fs.writeFileSync(folder + '/expose', node.expose.join(" "), 'utf8');  
-  }
-
-  if(node.domains && node.domains.length>0){
-    fs.writeFileSync(folder + '/domains', node.domains.join(" "), 'utf8');  
   }
 
   fs.writeFileSync(folder + '/container', node.container, 'utf8');
@@ -110,8 +123,6 @@ Builder.prototype.build = function(folder, done){
     instructions.push(boot);
     fs.writeFileSync(worker_root + '/boot', boot, 'utf8');
   })
-
-  fs.writeFileSync(folder + '/instructions', instructions.join("\n"), 'utf8');
 
   done && done(null, instructions.join("\n"));
 }

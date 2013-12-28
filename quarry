@@ -46,7 +46,7 @@ case "$1" in
     cp -r $APP_DIR/buildtemp $APP_DIR/build
     docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build/*"
     rm -rf $APP_DIR/buildtemp
-    echo "done"
+    
     #test $(docker wait $buildid) -eq 0
     #cp -r $APP_DIR/buildtemp $APP_DIR/build
     #docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build"
