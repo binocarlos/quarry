@@ -57,16 +57,26 @@ Builder.prototype.filepath = function(){
 	return this.options.dir + '/quarry.yml';
 }
 
-Builder.prototype.build = function(output){
+Builder.prototype.build = function(done){
   var self = this;
+
+  var instructions = [];
   
   this.nodes.service.forEach(function(service){
-    console.log(JSON.stringify(service, null, 4));
+    instructions.push([
+      "quarry",
+      "service",
+      self.options.id,
+      service.name,
+      service.container
+    ].concat(service.expose || []).join(" "))
   })
 
   this.nodes.worker.forEach(function(worker){
-    console.log(JSON.stringify(worker, null, 4));
+    //instructions.push(JSON.stringify(worker, null, 4));
   })
+
+  done(null, instructions.join("\n"));
 }
 
 Builder.prototype.process = function(doc){

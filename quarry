@@ -26,11 +26,10 @@ case "$1" in
   build)
     APP="$2"; IMAGE="app/$APP"; APP_DIR="$QUARRY_ROOT/$APP";
     # incoming tar stream -> /home/quarry/appname/src.tar
-    mkdir -p $APP_DIR/src
+    rm -rf $APP_DIR/src && mkdir -p $APP_DIR/src
     cat > $APP_DIR/src.tar
     cat $APP_DIR/src.tar | tar -xC $APP_DIR/src
     #tar -xf $APP_DIR/src.tar
-    
     #id=$(cat $SRC_DIR.tar | docker run -i -a stdin quarry/base /bin/bash -c "mkdir -p /app && tar -xC /app")
     #test $(docker wait $id) -eq 0
     #docker commit $id $IMAGE > /dev/null

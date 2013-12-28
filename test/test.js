@@ -38,6 +38,21 @@ describe('quarry', function(){
 
 	  })
 
+	  it('should return quarry launch instructions', function (done) {
+	    
+	    var builder = quarry.builder({
+	    	id:'test',
+	    	dir:__dirname
+	    })
+
+	    builder.build(function(error, instructions){
+	    	var parts = instructions.split("\n");
+	    	parts[0].should.equal('quarry service test mongo quarry/mongo 27017')
+	    	done();
+	    })
+
+	  })
+
 	})
 
 })

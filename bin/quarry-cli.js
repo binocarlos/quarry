@@ -20,8 +20,8 @@ program
       dir:input
     })
 
-    builder.build(output, function(){
-      
+    builder.build(function(error, instructions){
+      console.log(instructions);
     })
 
     
