@@ -45,7 +45,7 @@ describe('quarry', function(){
 	    	dir:__dirname
 	    })
 
-	    builder.build(function(error, instructions){
+	    builder.build(__dirname + '/build', function(error, instructions){
 	    	var parts = instructions.split("\n");
 	    	parts[0].should.equal('quarry service test mongo quarry/mongo 27017')
 	    	done();

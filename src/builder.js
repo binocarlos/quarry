@@ -57,26 +57,63 @@ Builder.prototype.filepath = function(){
 	return this.options.dir + '/quarry.yml';
 }
 
-Builder.prototype.build = function(done){
+Builder.prototype.process_node = function(folder, node){
+  if(node.container.indexOf('.')==0){
+
+  }
+
+  if(node.expose && node.expose.length>0){
+    fs.writeFileSync(folder + '/expose', node.expose.join(" "), 'utf8');  
+  }
+
+  if(node.domains && node.domains.length>0){
+    fs.writeFileSync(folder + '/domains', node.domains.join(" "), 'utf8');  
+  }
+
+  fs.writeFileSync(folder + '/container', node.container, 'utf8');
+}
+
+Builder.prototype.build = function(folder, done){
   var self = this;
 
   var instructions = [];
   
   this.nodes.service.forEach(function(service){
-    instructions.push([
+    var service_root = folder + '/service/' + service.name;
+    wrench.mkdirSyncRecursive(service_root);
+    self.process_node(service_root, service);
+
+    var boot = [
       "quarry",
       "service",
       self.options.id,
-      service.name,
-      service.container
-    ].concat(service.expose || []).join(" "))
+      service.name
+    ].join(" ")
+
+    instructions.push(boot);
+    fs.writeFileSync(service_root + '/boot', boot, 'utf8');
+
   })
 
   this.nodes.worker.forEach(function(worker){
-    //instructions.push(JSON.stringify(worker, null, 4));
+    var worker_root = folder + '/worker/' + worker.name;
+    wrench.mkdirSyncRecursive(worker_root);
+    self.process_node(worker_root, worker);
+
+    var boot = [
+      "quarry",
+      "worker",
+      self.options.id,
+      worker.name
+    ].join(" ")
+
+    instructions.push(boot);
+    fs.writeFileSync(worker_root + '/boot', boot, 'utf8');
   })
 
-  done(null, instructions.join("\n"));
+  fs.writeFileSync(folder + '/instructions', instructions.join("\n"), 'utf8');
+
+  done && done(null, instructions.join("\n"));
 }
 
 Builder.prototype.process = function(doc){

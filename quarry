@@ -15,7 +15,8 @@ fi
 
 case "$1" in
   receive)
-    APP="$2"; IMAGE="app/$APP"
+    APP="$2";
+    IMAGE="app/$APP"
     echo "-----> Cleaning up ..."
     quarry cleanup
     echo "-----> Building $APP ..."
@@ -24,11 +25,32 @@ case "$1" in
     ;;
 
   build)
-    APP="$2"; IMAGE="app/$APP"; APP_DIR="$QUARRY_ROOT/$APP";
-    # incoming tar stream -> /home/quarry/appname/src.tar
+    APP="$2";
+    IMAGE="app/$APP";
+    APP_DIR="$QUARRY_ROOT/$APP";
+
+    # reset the build folders
+    rm -rf $APP_DIR/buildtemp && mkdir -p $APP_DIR/buildtemp
+    rm -rf $APP_DIR/build
     rm -rf $APP_DIR/src && mkdir -p $APP_DIR/src
+
+    # incoming tar stream -> /home/quarry/appname/src.tar
     cat > $APP_DIR/src.tar
     cat $APP_DIR/src.tar | tar -xC $APP_DIR/src
+
+    # compile the stack
+    buildid=$(docker run -d -v $APP_DIR/buildtemp:/build -v $APP_DIR/src:/src quarry/base quarry-cli build $APP /src /build)
+    test $(docker wait $buildid) -eq 0
+
+    # copy the root owned build folder to the proper quarry owned one
+    cp -r $APP_DIR/buildtemp $APP_DIR/build
+    docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build/*"
+    rm -rf $APP_DIR/buildtemp
+    echo "done"
+    #test $(docker wait $buildid) -eq 0
+    #cp -r $APP_DIR/buildtemp $APP_DIR/build
+    #docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build"
+    #echo "done"
     #tar -xf $APP_DIR/src.tar
     #id=$(cat $SRC_DIR.tar | docker run -i -a stdin quarry/base /bin/bash -c "mkdir -p /app && tar -xC /app")
     #test $(docker wait $id) -eq 0
@@ -37,7 +59,7 @@ case "$1" in
     #pluginhook pre-build $APP
     #rm -rf $BUILD_DIR/app
     #docker cp $id:/app $BUILD_DIR
-    #id=$(docker run -d -v $BUILD_DIR:/build $IMAGE node /opt/quarry/bin/quarry-cli build $APP /build/app /build)
+    
     #docker attach $id
     #test $(docker wait $id) -eq 0
     #docker commit $id $IMAGE > /dev/null

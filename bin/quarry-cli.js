@@ -11,22 +11,19 @@ program
   .version(version)
 
 program
-  .command('build [id] [input]')
+  .command('build [id] [dir] [buildfolder]')
   .description('generate launch instructions for a stack')
-  .action(function(id, input){
+  .action(function(id, dir, buildfolder){
 
     var builder = quarry.builder({
       id:id,
-      dir:input
+      dir:dir
     })
 
-    builder.build(function(error, instructions){
-      console.log(instructions);
+    builder.build(buildfolder, function(error, instructions){
+      
     })
 
-    
-    
-    
   })
 
 // run help if the command is not known or they just type 'digger'
