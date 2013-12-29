@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -eo pipefail
+DOCKERIP=$(ifconfig docker0 | grep "inet addr" | sed 's/inet addr://' | awk '{ print $1 }' || "127.0.0.1")
 export QUARRY_ROOT=${QUARRY_ROOT:="/home/quarry"}
 export QUARRY_DATA_ROOT=${QUARRY_DATA_ROOT:="/var/lib/quarry/data"}
 export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/quarry/plugins"}
+export QUARRY_HOST=${QUARRY_HOST:=$DOCKERIP}
+export QUARRY_MASTER=${QUARRY_MASTER:=$QUARRY_HOST}
 
 [[ -f $QUARRY_ROOT/quarryrc ]] && source $QUARRY_ROOT/quarryrc
 
@@ -11,14 +14,6 @@ export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/quarry/plugins"}
 if [[ $(id -un) != "quarry" && $1 != "plugins-install" ]]; then
   sudo -u quarry -H $0 "$@"
   exit
-fi
-
-if [[ -z $QUARRY_HOST ]]; then
-  QUARRY_HOST=$(ifconfig docker0 | grep "inet addr" | sed 's/inet addr://' | awk '{ print $1 }' || "127.0.0.1")
-fi
-
-if [[ -z $QUARRY_MASTER ]]; then
-  QUARRY_MASTER=$QUARRY_HOST
 fi
 
 case "$1" in

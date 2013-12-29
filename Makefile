@@ -12,6 +12,8 @@ JSONSH_URL ?= https://raw.github.com/dominictarr/JSON.sh/master/JSON.sh
 all:
 	# Type "make install" to install.
 
+thing:
+	
 install: dependencies copyfiles plugins core version
 
 copyfiles:

@@ -59,11 +59,13 @@ case "$1" in
       # we build the docker file into a local image
       containername=$(cat $NODEFOLDER/container)
       reponame="$QUARRY_MASTER:5000/$containername"
-      echo $reponame
-      echo "building $containername -> $reponame"
+      echo "building $containername"
       docker build -t $reponame $NODEFOLDER/build
       # now commit the image to the master registry
-
+      echo "pushing $reponame"
+      docker push $reponame
+      # write the image name (which is pointing to the registry)
+      echo $reponame > $NODEFOLDER/container
     fi
     ;;
 
