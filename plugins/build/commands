@@ -63,7 +63,7 @@ case "$1" in
       docker build -t $reponame $NODEFOLDER/build
       # now commit the image to the master registry
       echo "pushing $reponame"
-      docker push $reponame
+      docker push $reponame 1>&2
       # write the image name (which is pointing to the registry)
       echo $reponame > $NODEFOLDER/container
     fi

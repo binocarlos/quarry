@@ -23,7 +23,12 @@ case "$1" in
     quarry cleanup
     echo "-----> Building $STACK ..."
     cat | quarry build $STACK
-    echo
+    echo "-----> Deploying $STACK ..."
+    quarry deploy $STACK
+    ;;
+
+  host)
+    echo $QUARRY_HOST
     ;;
 
   cleanup)

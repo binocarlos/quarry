@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -eo pipefail; [[ $QUARRY_TRACE ]] && set -x
+
+case "$1" in
+
+  env)
+    STACK="$2";
+
+    if [[ ! -z $STACK ]]; then
+      quarry env
+    fi
+
+    ENV_DIR="$QUARRY_ROOT/env";
+
+    if [[ ! -z $STACK ]]; then
+      ENV_DIR="$QUARRY_ROOT/$STACK/env";
+    fi
+    
+    for envfile in $ENV_DIR/* ; do
+      envname=$(echo $envfile | awk -F/ '{print $(NF)}')
+      envvalue=$(cat $envfile)
+      echo "$envname=$envvalue"
+    done
+    ;;
+
+  env:stack:set)
+    STACK="$2";
+    NAME="$3";
+    VALUE="$4";
+
+    ENV_DIR="$QUARRY_ROOT/$STACK/env";
+    mkdir -p $ENV_DIR
+    echo $VALUE > $ENV_DIR/$NAME
+    echo $VALUE
+    ;;
+
+  env:stack:get)
+    STACK="$2";
+    NAME="$3";
+    ENV_DIR="$QUARRY_ROOT/$STACK/env";
+    mkdir -p $ENV_DIR
+    cat $ENV_DIR/$NAME
+    ;;
+
+  # get the docker command to boot the node
+  env:master:set)
+    NAME="$2";
+    VALUE="$3";
+
+    ENV_DIR="$QUARRY_ROOT/env";
+    mkdir -p $ENV_DIR
+    echo $VALUE > $ENV_DIR/$NAME
+    echo $VALUE
+    ;;
+
+  env:master:get)
+    NAME="$2";
+
+    ENV_DIR="$QUARRY_ROOT/env";
+    mkdir -p $ENV_DIR
+    cat $ENV_DIR/$NAME
+    ;;
+
+  help)
+    cat
+    ;;
+
+esac

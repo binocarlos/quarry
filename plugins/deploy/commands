@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -eo pipefail; [[ $QUARRY_TRACE ]] && set -x
+
+case "$1" in
+
+  deploy)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build";
+    DEPLOY_DIR="$STACK_DIR/deploy";
+
+    mkdir -p $DEPLOY_DIR
+    mkdir -p $DEPLOY_DIR/env
+    mkdir -p $DEPLOY_DIR/services
+
+    # loop over the services and build them
+    for servicefolder in $BUILD_DIR/service/* ; do
+      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
+      containername=$(cat $servicefolder/container)
+
+      if [[ -d $DEPLOY_DIR/services/$servicename ]]; then
+        pid=$(cat $DEPLOY_DIR/services/$servicename/pid);
+        host=$(cat $DEPLOY_DIR/services/$servicename/host);
+
+
+        echo "    -----> Ensure Service $servicename - $containername ..."  
+      else
+        echo "    -----> Init Service $servicename - $containername ..."
+
+        host=$(quarry host)
+
+        boot=$(quarry deploy:generate_node $STACK service/$servicename);
+
+        echo "BOOT $boot"
+
+      fi
+
+    done
+
+    # loop over the workers and build them
+    for workerfolder in $BUILD_DIR/worker/* ; do
+      workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+      containername=$(cat $workerfolder/container)
+
+      echo "    -----> Deploy $workername - $containername ..."
+      #quarry build:node $workerfolder
+      
+    done
+    ;;
+
+  # get the docker command to boot the node
+  deploy:generate_node)
+    STACK="$2";
+    NODE="$3";
+    NODE_DIR="$QUARRY_ROOT/$STACK/build/$NODE";
+    container=`cat $NODE_DIR/container`
+    cmd="docker run -d"
+
+    if [[ -f "$NODE_DIR/expose" ]]; then
+      ports=`cat $NODE_DIR/expose`
+      for port in "${ports[@]}"
+      do
+        if [[ $port =~ ^[0-9]+$ ]] ; then $port="$port:$port"; fi
+        $cmd="$cmd -p $port"
+      done
+    fi
+    ;;
+
+
+  help)
+    cat
+    ;;
+
+esac
