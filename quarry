@@ -31,138 +31,6 @@ case "$1" in
     echo
     ;;
 
-  build)
-    STACK="$2";
-    STACK_DIR="$QUARRY_ROOT/$STACK";
-
-    # reset the build folders
-    rm -rf $STACK_DIR/buildtemp && mkdir -p $STACK_DIR/buildtemp
-    rm -rf $STACK_DIR/build
-    rm -rf $STACK_DIR/src && mkdir -p $STACK_DIR/src
-
-    # incoming tar stream -> /home/quarry/appname/src.tar
-    cat > $STACK_DIR/src.tar
-    cat $STACK_DIR/src.tar | tar -xC $STACK_DIR/src
-
-    # compile the stack into a build folder
-    buildid=$(docker run -d -v $STACK_DIR/buildtemp:/build -v $STACK_DIR/src:/src quarry/base quarry-cli build $STACK /src /build)
-    test $(docker wait $buildid) -eq 0
-
-    # copy the root owned build folder to a quarry owned one
-    cp -r $STACK_DIR/buildtemp $STACK_DIR/build
-    docker run -i -v $STACK_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build/*"
-    rm -rf $STACK_DIR/buildtemp
-
-    # loop over the services and build them
-    for servicefolder in $STACK_DIR/build/service/* ; do
-      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
-      containername=$(cat $servicefolder/container)
-
-      echo "    -----> Service $servicename - $containername ..."
-      quarry build:node $servicefolder
-
-    done
-
-    # loop over the workers and build them
-    for workerfolder in $STACK_DIR/build/worker/* ; do
-      workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
-      containername=$(cat $workerfolder/container)
-
-      echo "    -----> Worker $workername - $containername ..."
-      quarry build:node $workerfolder
-      
-    done
-
-    #test $(docker wait $buildid) -eq 0
-    #cp -r $APP_DIR/buildtemp $APP_DIR/build
-    #docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build"
-    #echo "done"
-    #tar -xf $APP_DIR/src.tar
-    #id=$(cat $SRC_DIR.tar | docker run -i -a stdin quarry/base /bin/bash -c "mkdir -p /app && tar -xC /app")
-    #test $(docker wait $id) -eq 0
-    #docker commit $id $IMAGE > /dev/null
-    #[[ -d $BUILD_DIR ]] || mkdir $BUILD_DIR
-    #pluginhook pre-build $APP
-    #rm -rf $BUILD_DIR/app
-    #docker cp $id:/app $BUILD_DIR
-    
-    #docker attach $id
-    #test $(docker wait $id) -eq 0
-    #docker commit $id $IMAGE > /dev/null
-    #pluginhook post-build $APP
-    ;;
-
-  build:node)
-    NODEFOLDER="$2";
-    # build the service container
-    if [[ -f "$NODEFOLDER/build/Dockerfile" ]]; then
-      # we build the docker file into a local image
-      containername=$(cat $NODEFOLDER/container)
-      echo "building $containername Dockerfile"
-      docker build -t $containername $NODEFOLDER/build
-
-      # now commit the image to the master registry
-
-    fi
-    ;;
-
-  core)
-    NAME="$2";
-    case "$NAME" in
-      reset)
-        quarry core:reset quarrycore-etcd
-        quarry core:reset quarrycore-registry
-        ;;
-      etcd)
-        quarry core:boot "quarrycore-etcd" "quarry/etcd" "-p 4001:4001 -p 7001:7001"
-        ;;
-      registry)
-        quarry core:boot "quarrycore-registry" "quarry/registry" "-p 5000:5000"
-        ;;
-      *)
-        quarry core etcd
-        quarry core registry
-        ;;
-    esac
-    ;;
-
-  core:boot)
-    NAME="$2";
-    IMAGE="$3";
-    OPTS="$4"
-    id=$(docker ps -a | grep "$NAME" | awk '{ print $1 }' || echo)
-    if [[ -z $id ]]; then
-      cmd="docker run -d -name $NAME $OPTS $IMAGE"
-      echo $cmd
-      docker run -d -name $NAME $OPTS $IMAGE
-    else
-      runningid=$(docker ps | grep "$NAME" | awk '{ print $1 }' || echo)
-      if [[ -z $runningid ]]; then
-        echo "starting $id"
-        docker start $id
-      fi
-    fi
-    ;;
-
-  core:reset)
-    NAME="$2";
-    running=$(docker ps | grep "$NAME" | awk '{ print $1 }' || echo)
-    container=$(docker ps -a | grep "$NAME" | awk '{ print $1 }' || echo)
-    if [[ ! -z $running ]]; then
-      docker stop $running
-    fi
-
-    if [[ ! -z $container ]]; then
-      docker rm $container
-    fi
-    ;;
-
-  testbuild)
-    APP="$2";
-    SOURCE_FOLDER=`pwd`
-    tar --exclude=.git -c . | quarry receive $APP
-    ;;
-
   cleanup)
     # delete all non-running container
     docker ps -a | grep 'Exit' |  awk '{print $1}' | xargs docker rm &> /dev/null &
@@ -179,11 +47,13 @@ case "$1" in
     ;;
 
   help)
+    echo
     cat<<EOF | pluginhook commands help | sort
-    help            Print the list of commands
-    plugins         Print active plugins
-    plugins-install Install active plugins
+    help                                         Print the list of commands
+    plugins                                      Print active plugins
+    plugins-install                              Install active plugins
 EOF
+    echo
     ;;
 
   *)

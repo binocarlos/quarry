@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -eo pipefail; [[ $QUARRY_TRACE ]] && set -x
+
+case "$1" in
+
+  core:boot)
+    quarry core:boot:service "quarrycore-etcd" "quarry/etcd" "-p 4001:4001 -p 7001:7001"
+    quarry core:boot:service "quarrycore-registry" "quarry/registry" "-p 5000:5000"
+    ;;
+
+  core:boot:service)
+    NAME="$2";
+    IMAGE="$3";
+    OPTS="$4"
+    id=$(docker ps -a | grep "$NAME" | awk '{ print $1 }' || echo)
+    if [[ -z $id ]]; then
+      echo "booting $IMAGE"
+      docker run -d -name $NAME $OPTS $IMAGE
+    else
+      runningid=$(docker ps | grep "$NAME" | awk '{ print $1 }' || echo)
+      if [[ -z $runningid ]]; then
+        echo "starting $id"
+        docker start $id
+      fi
+    fi
+    ;;
+
+  core:reset)
+    quarry core:reset:service quarrycore-etcd
+    quarry core:reset:service quarrycore-registry
+    ;;
+
+  core:reset:service)
+    NAME="$2";
+    running=$(docker ps | grep "$NAME" | awk '{ print $1 }' || echo)
+    container=$(docker ps -a | grep "$NAME" | awk '{ print $1 }' || echo)
+    if [[ ! -z $running ]]; then
+      docker stop $running
+    fi
+
+    if [[ ! -z $container ]]; then
+      docker rm $container
+    fi
+    ;;
+
+  help)
+    cat
+    ;;
+
+esac

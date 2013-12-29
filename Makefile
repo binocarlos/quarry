@@ -5,8 +5,9 @@ SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
 PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
 NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
 YODA_URL ?= https://raw.github.com/binocarlos/yoda/master/bootstrap.sh
+JSONSH_URL ?= https://raw.github.com/dominictarr/JSON.sh/master/JSON.sh
 
-.PHONY: all install copyfiles version plugins pluginhook dependencies sshcommand gitreceive docker aufs network test registry quarry-base core etcd
+.PHONY: all install copyfiles version plugins pluginhook dependencies sshcommand gitreceive docker aufs network test registry quarry-base core etcd jsonsh
 
 all:
 	# Type "make install" to install.
@@ -26,21 +27,22 @@ version:
 plugins: pluginhook docker
 	quarry plugins-install
 
-core: quarry-base registry etcd
+core: quarry-base registry yoda
+	quarry core:boot
 
 quarry-base:
 	docker build -t quarry/base .
 
 registry:
 	docker build -t quarry/registry registry
-	quarry core registry
 
-etcd:
-	quarry core etcd
-
-yoda:
+yoda: jsonsh
 	rm -rf ~/yoda
 	cd ~ && wget -qO- https://raw.github.com/binocarlos/yoda/master/bootstrap.sh | sudo bash
+
+jsonsh:
+	wget -O /usr/local/bin/json_parse ${JSONSH_URL}
+	chmod a+x /usr/local/bin/json_parse
 
 dependencies: sshcommand docker network
 
