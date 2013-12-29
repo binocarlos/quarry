@@ -60,10 +60,39 @@ Builder.prototype.filepath = function(){
 
 Builder.prototype.process_node = function(folder, node){
   var self = this;
-  if(node.container.indexOf('.')==0){
+  var id = self.options.id + "/" + node.name;
+
+  if(fs.existsSync(path.normalize(self.options.dir + '/' + node.container + '/Dockerfile'))){
     var node_src_folder = path.normalize(self.options.dir + '/' + node.container);
 
-    wrench.copyDirSyncRecursive(node_src_folder, folder + '/src');
+    wrench.copyDirSyncRecursive(node_src_folder, folder + '/build');
+    node.container = id;
+  }
+  else if(node.install){
+    wrench.copyDirSyncRecursive(self.options.dir, folder + '/build');
+
+    var Dockerfile = [
+      'FROM ' + (node.container || 'quarry/node'),
+      'ADD . /srv/app'
+    ]
+
+    if(node.install){
+      if(typeof(node.install)==='string'){
+        node.install = [node.install];
+      }
+
+      var installer = node.install.map(function(cmd){
+        return 'RUN cd /srv/app && ' + cmd;
+      }).join("\n")
+
+      Dockerfile.push(installer);
+    }
+    
+    Dockerfile.push("ENTRYPOINT cd /srv/app && " + node.run);
+    Dockerfile = Dockerfile.join("\n");
+
+    fs.writeFileSync(folder + '/build/Dockerfile', Dockerfile, 'utf8');
+    node.container = id;
   }
 
   if(node.domains && node.domains.length>0){
@@ -83,48 +112,26 @@ Builder.prototype.process_node = function(folder, node){
     fs.writeFileSync(folder + '/expose', node.expose.join(" "), 'utf8');  
   }
 
+  fs.writeFileSync(folder + '/id', id, 'utf8');
   fs.writeFileSync(folder + '/container', node.container, 'utf8');
 }
 
 Builder.prototype.build = function(folder, done){
   var self = this;
 
-  var instructions = [];
-  
   this.nodes.service.forEach(function(service){
     var service_root = folder + '/service/' + service.name;
     wrench.mkdirSyncRecursive(service_root);
     self.process_node(service_root, service);
-
-    var boot = [
-      "quarry",
-      "service",
-      self.options.id,
-      service.name
-    ].join(" ")
-
-    instructions.push(boot);
-    fs.writeFileSync(service_root + '/boot', boot, 'utf8');
-
   })
 
   this.nodes.worker.forEach(function(worker){
     var worker_root = folder + '/worker/' + worker.name;
     wrench.mkdirSyncRecursive(worker_root);
     self.process_node(worker_root, worker);
-
-    var boot = [
-      "quarry",
-      "worker",
-      self.options.id,
-      worker.name
-    ].join(" ")
-
-    instructions.push(boot);
-    fs.writeFileSync(worker_root + '/boot', boot, 'utf8');
   })
 
-  done && done(null, instructions.join("\n"));
+  done && done();
 }
 
 Builder.prototype.process = function(doc){
@@ -138,44 +145,5 @@ Builder.prototype.process = function(doc){
     if(self.nodes[obj.type]){
       self.nodes[obj.type].push(obj);  
     }
-  })
-
-  function process_container(node){
-    if(node.container.match(/\/Dockerfile/)){
-      self.instructions.push({
-        type:'build',
-        id:self.options.id + '/' + node.name,
-        container:node.container
-      })
-
-      node.container = self.options.id + '/' + node.name;
-    }
-  }
-
-  this.nodes.service.forEach(function(service){
-
-    process_container(service);
-
-    self.instructions.push({
-      type:'ensure',
-      name:self.options.id + '/' + service.name,
-      container:service.container,
-      expose:service.expose
-    })
-  })
-
-  this.nodes.worker.forEach(function(worker){
-
-    process_container(worker);
-
-    self.instructions.push({
-      type:'deploy',
-      name:self.options.id + '/' + worker.name,
-      container:worker.container,
-      expose:worker.expose,
-      domains:worker.domains,
-      install:worker.install,
-      run:worker.run
-    })
   })
 }

@@ -4,17 +4,20 @@ QUARRY_ROOT ?= /home/quarry
 SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
 PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
 NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
+YODA_URL ?= https://raw.github.com/binocarlos/yoda/master/bootstrap.sh
 
 .PHONY: all install copyfiles version plugins pluginhook dependencies sshcommand gitreceive docker aufs network test
 
 all:
 	# Type "make install" to install.
 
-install: dependencies copyfiles plugins services quarry-base version
+install: dependencies copyfiles plugins core version
 
 copyfiles:
 	cp quarry /usr/local/bin/quarry || true
+	mkdir -p /etc/quarry
 	mkdir -p /var/lib/quarry/plugins
+	mkdir -p /var/lib/quarry/data
 	cp -r plugins/* /var/lib/quarry/plugins
 
 version:
@@ -23,13 +26,20 @@ version:
 plugins: pluginhook docker
 	quarry plugins-install
 
-services: docker registry etcd
+core: docker quarry-base registry etcd
+
+quarry-base:
+	docker build -t quarry/base .
 
 registry:
-	quarry service registry
+	quarry core registry
 
 etcd:
-	quarry service etcd
+	quarry core etcd
+
+yoda:
+	rm -rf ~/yoda
+	cd ~ && wget -qO- https://raw.github.com/binocarlos/yoda/master/bootstrap.sh | sudo bash
 
 dependencies: sshcommand docker network
 
@@ -41,9 +51,6 @@ sshcommand:
 pluginhook:
 	wget -qO /tmp/pluginhook_0.1.0_amd64.deb ${PLUGINHOOK_URL}
 	dpkg -i /tmp/pluginhook_0.1.0_amd64.deb
-
-quarry-base:
-	docker build -t quarry/base .
 
 docker: aufs
 	egrep -i "^docker" /etc/group || groupadd docker

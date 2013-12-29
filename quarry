@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 export QUARRY_ROOT=${QUARRY_ROOT:="/home/quarry"}
-export DATA_ROOT=${QUARRY_ROOT:="/var/lib/quarry/data"}
+export QUARRY_DATA_ROOT=${QUARRY_DATA_ROOT:="/var/lib/quarry/data"}
 export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/quarry/plugins"}
 
 [[ -f $QUARRY_ROOT/quarryrc ]] && source $QUARRY_ROOT/quarryrc
@@ -11,6 +11,14 @@ export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/quarry/plugins"}
 if [[ $(id -un) != "quarry" && $1 != "plugins-install" ]]; then
   sudo -u quarry -H $0 "$@"
   exit
+fi
+
+if [[ -f "/etc/quarry/host" ]]; then
+  QUARRY_HOST=`cat /etc/quarry/host`;
+fi
+
+if [[ -z $QUARRY_HOST ]]; then
+  QUARRY_HOST=$(ifconfig docker0 | grep "inet addr" | sed 's/inet addr://' | awk '{ print $1 }')
 fi
 
 case "$1" in
@@ -46,7 +54,12 @@ case "$1" in
     cp -r $APP_DIR/buildtemp $APP_DIR/build
     docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build/*"
     rm -rf $APP_DIR/buildtemp
-    
+
+    for i in $APP_DIR/build/service/* ; do
+      servicename=$(echo $i | awk -F/ '{print $(NF)}')
+      
+    done
+
     #test $(docker wait $buildid) -eq 0
     #cp -r $APP_DIR/buildtemp $APP_DIR/build
     #docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build"
@@ -66,7 +79,7 @@ case "$1" in
     #pluginhook post-build $APP
     ;;
 
-  service)
+  core)
     NAME="$2";
     case "$NAME" in
       etcd)
@@ -88,12 +101,6 @@ case "$1" in
     APP="$2";
     SOURCE_FOLDER=`pwd`
     tar --exclude=.git -c . | quarry build $APP
-    ;;
-
-  core)
-    SERVICE="$2";
-    id=$(docker ps )
-
     ;;
 
   cleanup)
