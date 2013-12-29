@@ -26,7 +26,7 @@ version:
 plugins: pluginhook docker
 	quarry plugins-install
 
-core: docker quarry-base registry etcd
+core: quarry-base registry etcd
 
 quarry-base:
 	docker build -t quarry/base .

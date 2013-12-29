@@ -13,12 +13,12 @@ if [[ $(id -un) != "quarry" && $1 != "plugins-install" ]]; then
   exit
 fi
 
-if [[ -f "/etc/quarry/host" ]]; then
-  QUARRY_HOST=`cat /etc/quarry/host`;
-fi
-
 if [[ -z $QUARRY_HOST ]]; then
   QUARRY_HOST=$(ifconfig docker0 | grep "inet addr" | sed 's/inet addr://' | awk '{ print $1 }')
+fi
+
+if [[ -z $QUARRY_MASTER ]]; then
+  QUARRY_MASTER=$QUARRY_HOST
 fi
 
 case "$1" in
@@ -73,6 +73,8 @@ case "$1" in
       
     done
 
+    echo "HOST $QUARRY_HOST"
+
     #test $(docker wait $buildid) -eq 0
     #cp -r $APP_DIR/buildtemp $APP_DIR/build
     #docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build"
@@ -97,7 +99,7 @@ case "$1" in
     # build the service container
     if [[ -f "$NODEFOLDER/build/Dockerfile" ]]; then
       containername=$(cat $NODEFOLDER/container)
-      echo "building $NODEFOLDER/build/Dockerfile -> $containername"
+      echo "building $containername Dockerfile"
       docker build -t $containername $NODEFOLDER/build
     fi
     ;;
@@ -106,18 +108,28 @@ case "$1" in
     NAME="$2";
     case "$NAME" in
       etcd)
-        running=$(docker ps | grep etcd | awk '{ print $1 }')
-        if [[ -z $running ]]; then
-          docker run -name "etcd" -d -p 4001:4001 -p 7001:7001 quarry/etcd
-        fi
-      ;;
+        quarry core:service "quarrycore-etcd" "quarry/etcd" "-p 4001:4001 -p 7001:7001"
+        ;;
       registry)
-        running=$(docker ps | grep registry | awk '{ print $1 }')
-        if [[ -z $running ]]; then
-          docker run -name "registry" -d -p 5000:5000 samalba/docker-registry 
-        fi
-      ;;
+        quarry core:service "quarrycore-registry" "samalba/docker-registry" "-p 5000:5000"
+        ;;
     esac
+    ;;
+
+  core:service)
+    NAME="$2";
+    IMAGE="$3";
+    PORTS="$4"
+    id=$(docker ps -a | grep "$NAME" | awk '{ print $1 }' || echo)
+    if [[ -z $id ]]; then
+      docker run -name "$NAME" -d $PORTS $IMAGE
+    else
+      runningid=$(docker ps | grep "$NAME" | awk '{ print $1 }' || echo)
+      if [[ -z $runningid ]]; then
+        echo "starting $id"
+        docker start $id
+      fi
+    fi
     ;;
 
   testbuild)
