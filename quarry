@@ -14,7 +14,7 @@ if [[ $(id -un) != "quarry" && $1 != "plugins-install" ]]; then
 fi
 
 if [[ -z $QUARRY_HOST ]]; then
-  QUARRY_HOST=$(ifconfig docker0 | grep "inet addr" | sed 's/inet addr://' | awk '{ print $1 }')
+  QUARRY_HOST=$(ifconfig docker0 | grep "inet addr" | sed 's/inet addr://' | awk '{ print $1 }' || "127.0.0.1")
 fi
 
 if [[ -z $QUARRY_MASTER ]]; then
@@ -73,8 +73,6 @@ case "$1" in
       
     done
 
-    echo "HOST $QUARRY_HOST"
-
     #test $(docker wait $buildid) -eq 0
     #cp -r $APP_DIR/buildtemp $APP_DIR/build
     #docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build"
@@ -98,37 +96,64 @@ case "$1" in
     NODEFOLDER="$2";
     # build the service container
     if [[ -f "$NODEFOLDER/build/Dockerfile" ]]; then
+      # we build the docker file into a local image
       containername=$(cat $NODEFOLDER/container)
       echo "building $containername Dockerfile"
       docker build -t $containername $NODEFOLDER/build
+
+      # now commit the image to the master registry
+
     fi
     ;;
 
   core)
     NAME="$2";
     case "$NAME" in
+      reset)
+        quarry core:reset quarrycore-etcd
+        quarry core:reset quarrycore-registry
+        ;;
       etcd)
-        quarry core:service "quarrycore-etcd" "quarry/etcd" "-p 4001:4001 -p 7001:7001"
+        quarry core:boot "quarrycore-etcd" "quarry/etcd" "-p 4001:4001 -p 7001:7001"
         ;;
       registry)
-        quarry core:service "quarrycore-registry" "samalba/docker-registry" "-p 5000:5000"
+        quarry core:boot "quarrycore-registry" "quarry/registry" "-p 5000:5000"
+        ;;
+      *)
+        quarry core etcd
+        quarry core registry
         ;;
     esac
     ;;
 
-  core:service)
+  core:boot)
     NAME="$2";
     IMAGE="$3";
-    PORTS="$4"
+    OPTS="$4"
     id=$(docker ps -a | grep "$NAME" | awk '{ print $1 }' || echo)
     if [[ -z $id ]]; then
-      docker run -name "$NAME" -d $PORTS $IMAGE
+      cmd="docker run -d -name $NAME $OPTS $IMAGE"
+      echo $cmd
+      docker run -d -name $NAME $OPTS $IMAGE
     else
       runningid=$(docker ps | grep "$NAME" | awk '{ print $1 }' || echo)
       if [[ -z $runningid ]]; then
         echo "starting $id"
         docker start $id
       fi
+    fi
+    ;;
+
+  core:reset)
+    NAME="$2";
+    running=$(docker ps | grep "$NAME" | awk '{ print $1 }' || echo)
+    container=$(docker ps -a | grep "$NAME" | awk '{ print $1 }' || echo)
+    if [[ ! -z $running ]]; then
+      docker stop $running
+    fi
+
+    if [[ ! -z $container ]]; then
+      docker rm $container
     fi
     ;;
 

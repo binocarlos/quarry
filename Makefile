@@ -6,7 +6,7 @@ PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_
 NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
 YODA_URL ?= https://raw.github.com/binocarlos/yoda/master/bootstrap.sh
 
-.PHONY: all install copyfiles version plugins pluginhook dependencies sshcommand gitreceive docker aufs network test
+.PHONY: all install copyfiles version plugins pluginhook dependencies sshcommand gitreceive docker aufs network test registry quarry-base core etcd
 
 all:
 	# Type "make install" to install.
@@ -32,6 +32,7 @@ quarry-base:
 	docker build -t quarry/base .
 
 registry:
+	docker build -t quarry/registry registry
 	quarry core registry
 
 etcd:
