@@ -23,40 +23,53 @@ fi
 
 case "$1" in
   receive)
-    APP="$2";
-    IMAGE="app/$APP"
+    STACK="$2";
     echo "-----> Cleaning up ..."
     quarry cleanup
-    echo "-----> Building $APP ..."
-    cat | quarry build $APP
+    echo "-----> Building $STACK ..."
+    cat | quarry build $STACK
     echo
     ;;
 
   build)
-    APP="$2";
-    IMAGE="app/$APP";
-    APP_DIR="$QUARRY_ROOT/$APP";
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
 
     # reset the build folders
-    rm -rf $APP_DIR/buildtemp && mkdir -p $APP_DIR/buildtemp
-    rm -rf $APP_DIR/build
-    rm -rf $APP_DIR/src && mkdir -p $APP_DIR/src
+    rm -rf $STACK_DIR/buildtemp && mkdir -p $STACK_DIR/buildtemp
+    rm -rf $STACK_DIR/build
+    rm -rf $STACK_DIR/src && mkdir -p $STACK_DIR/src
 
     # incoming tar stream -> /home/quarry/appname/src.tar
-    cat > $APP_DIR/src.tar
-    cat $APP_DIR/src.tar | tar -xC $APP_DIR/src
+    cat > $STACK_DIR/src.tar
+    cat $STACK_DIR/src.tar | tar -xC $STACK_DIR/src
 
-    # compile the stack
-    buildid=$(docker run -d -v $APP_DIR/buildtemp:/build -v $APP_DIR/src:/src quarry/base quarry-cli build $APP /src /build)
+    # compile the stack into a build folder
+    buildid=$(docker run -d -v $STACK_DIR/buildtemp:/build -v $STACK_DIR/src:/src quarry/base quarry-cli build $STACK /src /build)
     test $(docker wait $buildid) -eq 0
 
-    # copy the root owned build folder to the proper quarry owned one
-    cp -r $APP_DIR/buildtemp $APP_DIR/build
-    docker run -i -v $APP_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build/*"
-    rm -rf $APP_DIR/buildtemp
+    # copy the root owned build folder to a quarry owned one
+    cp -r $STACK_DIR/buildtemp $STACK_DIR/build
+    docker run -i -v $STACK_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build/*"
+    rm -rf $STACK_DIR/buildtemp
 
-    for i in $APP_DIR/build/service/* ; do
-      servicename=$(echo $i | awk -F/ '{print $(NF)}')
+    # loop over the services and build them
+    for servicefolder in $STACK_DIR/build/service/* ; do
+      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
+      containername=$(cat $servicefolder/container)
+
+      echo "    -----> Service $servicename - $containername ..."
+      quarry build:node $servicefolder
+
+    done
+
+    # loop over the workers and build them
+    for workerfolder in $STACK_DIR/build/worker/* ; do
+      workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+      containername=$(cat $workerfolder/container)
+
+      echo "    -----> Worker $workername - $containername ..."
+      quarry build:node $workerfolder
       
     done
 
@@ -77,6 +90,16 @@ case "$1" in
     #test $(docker wait $id) -eq 0
     #docker commit $id $IMAGE > /dev/null
     #pluginhook post-build $APP
+    ;;
+
+  build:node)
+    NODEFOLDER="$2";
+    # build the service container
+    if [[ -f "$NODEFOLDER/build/Dockerfile" ]]; then
+      containername=$(cat $NODEFOLDER/container)
+      echo "building $NODEFOLDER/build/Dockerfile -> $containername"
+      docker build -t $containername $NODEFOLDER/build
+    fi
     ;;
 
   core)
@@ -100,7 +123,7 @@ case "$1" in
   testbuild)
     APP="$2";
     SOURCE_FOLDER=`pwd`
-    tar --exclude=.git -c . | quarry build $APP
+    tar --exclude=.git -c . | quarry receive $APP
     ;;
 
   cleanup)
