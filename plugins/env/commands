@@ -31,6 +31,44 @@ case "$1" in
 #    done
 #    ;;
 
+  env:docker)
+    STACK="$2";
+
+    folder=$(mktemp -d)
+    cp -r $QUARRY_ROOT/env/* $folder
+    if [[ ! -z $STACK ]]; then
+      cp -r $QUARRY_ROOT/$STACK/env/* $folder
+    fi
+    env=""
+    for envfile in $folder/* ; do
+      envname=$(echo $envfile | awk -F/ '{print $(NF)}')
+      envvalue=$(cat $envfile)
+      env="$env -e $envname=\"$envvalue\""
+    done
+    rm -rf $folder
+    echo "$env"
+    ;;
+
+  env:writenode)
+    STACK="$2";
+    basename="$3";
+    host="$4";
+    port="$5";
+    global="$6";
+
+    quarry env:stack:set $STACK "${basename}_TCP" "tcp://$host:$port"
+    quarry env:stack:set $STACK "${basename}_TCP_PROTO" "tcp"
+    quarry env:stack:set $STACK "${basename}_TCP_ADDR" "$host"
+    quarry env:stack:set $STACK "${basename}_TCP_PORT" "$port"
+    
+    if [[ ! -z $global ]]; then
+      quarry env:global:set "${basename}_TCP" "tcp://$host:$port"
+      quarry env:global:set "${basename}_TCP_PROTO" "tcp"
+      quarry env:global:set "${basename}_TCP_ADDR" "$host"
+      quarry env:global:set "${basename}_TCP_PORT" "$port"
+    fi
+    ;;
+
   env:stack:set)
     STACK="$2";
     NAME="$3";
@@ -39,7 +77,6 @@ case "$1" in
     ENV_DIR="$QUARRY_ROOT/$STACK/env";
     mkdir -p $ENV_DIR
     echo $VALUE > $ENV_DIR/$NAME
-    echo $VALUE
     ;;
 
   env:stack:get)
@@ -51,17 +88,16 @@ case "$1" in
     ;;
 
   # get the docker command to boot the node
-  env:master:set)
+  env:global:set)
     NAME="$2";
     VALUE="$3";
 
     ENV_DIR="$QUARRY_ROOT/env";
     mkdir -p $ENV_DIR
     echo $VALUE > $ENV_DIR/$NAME
-    echo $VALUE
     ;;
 
-  env:master:get)
+  env:global:get)
     NAME="$2";
 
     ENV_DIR="$QUARRY_ROOT/env";

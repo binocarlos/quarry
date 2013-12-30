@@ -35,6 +35,10 @@ case "$1" in
   deploy:worker)
     STACK="$2";
     WORKER="$3";
+
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build/worker/$WORKER";
+
     ;;
 
   deploy:service)
@@ -85,12 +89,12 @@ case "$1" in
 
     fi
 
-    quarry deploy:service_env $STACK $SERVICE
+    quarry deploy:write_service_env $STACK $SERVICE
     ;;
 
   # get the env vars from a service node
   # write them to the stack env
-  deploy:service_env)
+  deploy:write_service_env)
     STACK="$2";
     SERVICE="$3";
     NAME=$(echo $SERVICE | sed 's/^.*\///' | awk '{print toupper($0)}')
@@ -110,24 +114,12 @@ case "$1" in
         
         container_port=$(echo $port | sed 's/^.*\://')
         public_port=$(docker port $cid $container_port | sed 's/^.*\://')
-        
-        echo "EXPOSE $host $container_port $NAME"
 
         basename="${NAME}_PORT_${container_port}"
-
-        quarry env:stack:set $STACK "${basename}_TCP" "tcp://$host:$public_port"
-        quarry env:stack:set $STACK "${basename}_TCP_PROTO" "tcp"
-        quarry env:stack:set $STACK "${basename}_TCP_ADDR" "$host"
-        quarry env:stack:set $STACK "${basename}_TCP_PORT" "$public_port"
-
         # if a node has the global setting then it is exported to all workers
         global=$(quarry db:build:setting $STACK service/$SERVICE global)
-        if [[ ! -z $global ]]; then
-          quarry env:stack:set $STACK "${basename}_TCP" "tcp://$host:$public_port"
-          quarry env:stack:set $STACK "${basename}_TCP_PROTO" "tcp"
-          quarry env:stack:set $STACK "${basename}_TCP_ADDR" "$host"
-          quarry env:stack:set $STACK "${basename}_TCP_PORT" "$public_port"
-        fi
+
+        quarry env:writenode $STACK $basename $host $public_port $global
         
       done
     fi
