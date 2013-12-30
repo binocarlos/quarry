@@ -6,21 +6,9 @@ case "$1" in
   deploy)
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
-
-    # the folder that contains the deployment layout
     BUILD_DIR="$STACK_DIR/build";
 
-    # copy the current deployment into the previous state
-    DEPLOY_DIR="$STACK_DIR/deploy";
-
-    mkdir -p $DEPLOY_DIR
-    
-    if [[ -d $DEPLOY_DIR/worker ]]; then
-      cp -rf $DEPLOY_DIR/worker $DEPLOY_DIR/previous
-    fi
-
-    mkdir -p $DEPLOY_DIR/service
-    mkdir -p $DEPLOY_DIR/worker
+    quarry db:snapshot $STACK
 
     pluginhook pre-deploy $STACK
 
@@ -54,56 +42,99 @@ case "$1" in
     SERVICE="$3";
 
     STACK_DIR="$QUARRY_ROOT/$STACK";
-    BUILD_DIR="$STACK_DIR/build";
-    DEPLOY_DIR="$STACK_DIR/deploy/service";
+    BUILD_DIR="$STACK_DIR/build/service/$SERVICE";
 
-    servicefolder="$BUILD_DIR/service/$SERVICE"
     nodename="$STACK-service-$SERVICE"
+    container=$(cat $BUILD_DIR/container)
 
-    # is the service running - the cid file will be full if yes
-    cidfile="$DEPLOY_DIR/$SERVICE.cid"
-    
-    # there is a cidfile - check it is actuall running
-    if [[ -f $cidfile ]]; then
+    running=$(docker ps | grep "$nodename" | awk '{ print $1 }' || echo)
+    cid=$(quarry db:service:get $STACK $SERVICE id)
 
-      running=$(docker ps | grep "$nodename" | awk '{ print $1 }' || echo)
+    echo "    -----> Init Service $SERVICE - $container $cid ..."
 
-      if [[ -z $running ]]; then
-        rm -f $cidfile
+    # this means the service is not running
+    if [[ -z $running ]]; then
+
+      # this means we have never run it
+      if [[ -z $cid ]]; then
+        
+        opts=$(quarry deploy:generate_opts $STACK service/$SERVICE);
+
+        docker rm $nodename || true
+        # BOOT SERVICE HERE
+        cid=$(docker run -d -t -name $nodename $opts $container)
+
+        # write the container
+        quarry db:service:set $STACK $SERVICE id $cid
+        quarry db:service:set $STACK $SERVICE name $nodename
+        quarry db:service:set $STACK $SERVICE container $container
+        quarry db:service:set $STACK $SERVICE opts "$opts"
+
+        echo "$SERVICE booted - $cid"
+        echo "          $opts"
+
+      else
+        echo "$SERVICE restarting - $cid"
+        docker start $cid
       fi
+
+    # this means the service is already running
+    else
+
+      echo "$SERVICE already running - $cid" 
 
     fi
 
-    # we need to boot the service
-    if [[ ! -f $cidfile ]]; then
+    quarry deploy:service_env $STACK $SERVICE
+    ;;
 
-      docker rm $nodename
-      
-      opts=$(quarry deploy:generate_opts $STACK service/$servicename);
-      container=$(cat $servicefolder/container)
-      opts=$(quarry deploy:generate_opts $STACK service/$SERVICE);
+  # get the env vars from a service node
+  # write them to the stack env
+  deploy:service_env)
+    STACK="$2";
+    SERVICE="$3";
+    NAME=$(echo $SERVICE | sed 's/^.*\///' | awk '{print toupper($0)}')
 
-      echo "    -----> Init Service $SERVICE - $container ..."
-      echo "            $opts"
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build/service/$SERVICE";
 
-      cid=$(docker run -d -t -name $nodename $opts $container)
-      echo "running - $cid"
+    host=$QUARRY_HOST
 
-      echo $cid > $cidfile
+    cid=$(quarry db:service:get $STACK $SERVICE id)
 
-      # PORTS
-      if [[ -f "$servicefolder/expose" ]]; then
-        ports=`cat $servicefolder/expose`
-        for port in "${ports[@]}"
-        do
-          echo "ENV $port"
-        done
-      fi
-      
+    # PORTS
+    if [[ -f "$BUILD_DIR/expose" ]]; then
+      ports=`cat $BUILD_DIR/expose`
+      for port in "${ports[@]}"
+      do
+        
+        container_port=$(echo $port | sed 's/^.*\://')
+        public_port=$(docker port $cid $container_port | sed 's/^.*\://')
+        
+        echo "EXPOSE $host $container_port $NAME"
+
+        basename="${NAME}_PORT_${container_port}"
+
+        quarry env:stack:set $STACK "${basename}_TCP" "tcp://$host:$public_port"
+        quarry env:stack:set $STACK "${basename}_TCP_PROTO" "tcp"
+        quarry env:stack:set $STACK "${basename}_TCP_ADDR" "$host"
+        quarry env:stack:set $STACK "${basename}_TCP_PORT" "$public_port"
+
+        # if a node has the global setting then it is exported to all workers
+        global=$(quarry db:build:setting $STACK service/$SERVICE global)
+        if [[ ! -z $global ]]; then
+          quarry env:stack:set $STACK "${basename}_TCP" "tcp://$host:$public_port"
+          quarry env:stack:set $STACK "${basename}_TCP_PROTO" "tcp"
+          quarry env:stack:set $STACK "${basename}_TCP_ADDR" "$host"
+          quarry env:stack:set $STACK "${basename}_TCP_PORT" "$public_port"
+        fi
+        
+      done
     fi
     ;;
 
-  # get the docker command to boot the node
+  # generate the docker run options for a node
+  # volumes and ports
   deploy:generate_opts)
     STACK="$2";
     NODE="$3";

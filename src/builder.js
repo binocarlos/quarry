@@ -134,6 +134,7 @@ Builder.prototype.process_node = function(folder, node){
     fs.writeFileSync(folder + '/volumes', node.volumes.join(" "), 'utf8');  
   }
 
+  fs.writeFileSync(folder + '/node.json', JSON.stringify(node), 'utf8');
   fs.writeFileSync(folder + '/id', id, 'utf8');
   fs.writeFileSync(folder + '/container', node.container, 'utf8');
 }
