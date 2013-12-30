@@ -21,8 +21,11 @@ case "$1" in
     # loop over the workers and build them
     for workerfolder in $BUILD_DIR/worker/* ; do
       workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+
       quarry deploy:worker $STACK $workername
     done
+
+    quarry deploy:cleanup $STACK
 
     pluginhook post-deploy $STACK
     ;;
@@ -30,6 +33,18 @@ case "$1" in
   # kill the containers from the old stack
   deploy:cleanup)
     echo "KILL OLD STACK"
+    STACK="$2";
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+
+    if [[ -d "$DB_DIR/previous" ]]; then
+      for workerfolder in $DB_DIR/previous/* ; do
+        workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+        previouscontainer=`cat $workerfolder/id`
+        echo "KILL PREVIOUS $workername $previouscontainer"
+        docker kill $previouscontainer || true
+      done
+    fi
+    
     ;;
 
   deploy:worker)
@@ -38,6 +53,26 @@ case "$1" in
 
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build/worker/$WORKER";
+
+    container=$(cat $BUILD_DIR/container)
+
+    echo "    -----> Init Worker $WORKER - $container ..."
+
+    opts=$(quarry deploy:generate_opts $STACK worker/$WORKER);
+    env=$(quarry env:docker $STACK)
+
+    # BOOT SERVICE HERE
+    cid=$(docker run -d -t $opts $env $container)
+
+    # write the container
+    quarry db:worker:set $STACK $WORKER id $cid
+    quarry db:worker:set $STACK $WORKER container $container
+    quarry db:worker:set $STACK $WORKER opts "$opts"
+    quarry db:worker:set $STACK $WORKER env "$env"
+
+    echo "$WORKER booted - $cid"
+    echo "          $opts"
+    echo "          $env"
 
     ;;
 
@@ -109,18 +144,16 @@ case "$1" in
     # PORTS
     if [[ -f "$BUILD_DIR/expose" ]]; then
       ports=`cat $BUILD_DIR/expose`
+
       for port in "${ports[@]}"
       do
-        
+      
         container_port=$(echo $port | sed 's/^.*\://')
         public_port=$(docker port $cid $container_port | sed 's/^.*\://')
 
         basename="${NAME}_PORT_${container_port}"
-        # if a node has the global setting then it is exported to all workers
-        global=$(quarry db:build:setting $STACK service/$SERVICE global)
+        quarry env:writenode $STACK $basename $host $public_port
 
-        quarry env:writenode $STACK $basename $host $public_port $global
-        
       done
     fi
     ;;

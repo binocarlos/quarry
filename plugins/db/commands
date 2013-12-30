@@ -26,6 +26,8 @@ case "$1" in
 
     quarry db:prepare $STACK
 
+    rm -rf $DB_DIR/previous
+
     if [[ -d $DB_DIR/worker ]]; then
       cp -rf $DB_DIR/worker $DB_DIR/previous
     fi
@@ -72,14 +74,34 @@ case "$1" in
     echo $VALUE > $FULLPATH
     ;;
 
-  # each node has a node.json from the build - read a single property of it
-  db:build:setting)
+  db:worker:get)
     STACK="$2";
-    NODE="$3";
-    NAME="$4";
+    WORKER="$3";
+    FILE="$4";
 
-    FILE="$QUARRY_ROOT/$STACK/build/$NODE/node.json"
-    cat $FILE | json_parse | grep "\[\"$NAME\"\]" | awk '{print $2}'
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+    FULLPATH="$DB_DIR/worker/$WORKER/$FILE"
+
+    if [[ -f $FULLPATH ]]; then
+      cat $FULLPATH
+    else
+      echo ""
+    fi
+    ;;
+
+  db:worker:set)
+    STACK="$2";
+    WORKER="$3";
+    FILE="$4";
+    VALUE="$5";
+
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+    FOLDER="$DB_DIR/worker/$WORKER"
+    FULLPATH="$FOLDER/$FILE"
+
+    mkdir -p $FOLDER
+  
+    echo $VALUE > $FULLPATH
     ;;
 
   help)
