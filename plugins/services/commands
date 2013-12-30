@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -eo pipefail; [[ $QUARRY_TRACE ]] && set -x
+
+case "$1" in
+
+  # stop all services for a stack
+  services:stop)
+    STACK="$2";
+    if [[ -z $STACK ]]; then
+      echo "usage quarry services:stop <stack>"
+      exit 1;
+    fi
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    DEPLOY_DIR="$STACK_DIR/deploy/service";
+
+    for cidfile in $DEPLOY_DIR/* ; do
+      cid=`cat $cidfile`
+      docker stop $cid
+    done
+    ;;
+
+  # start all services for a stack
+  services:start)
+    STACK="$2";
+    if [[ -z $STACK ]]; then
+      echo "usage quarry services:stop <stack>"
+      exit 1;
+    fi
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    DEPLOY_DIR="$STACK_DIR/deploy/service";
+
+    for cidfile in $DEPLOY_DIR/* ; do
+      cid=`cat $cidfile`
+      docker start $cid
+    done
+    ;;
+
+  help)
+    cat
+    ;;
+
+esac

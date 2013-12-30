@@ -88,8 +88,17 @@ case "$1" in
 
       cid=$(docker run -d -t -name $nodename $opts $container)
       echo "running - $cid"
-      
+
       echo $cid > $cidfile
+
+      # PORTS
+      if [[ -f "$servicefolder/expose" ]]; then
+        ports=`cat $servicefolder/expose`
+        for port in "${ports[@]}"
+        do
+          echo "ENV $port"
+        done
+      fi
       
     fi
     ;;
