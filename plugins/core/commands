@@ -5,7 +5,7 @@ case "$1" in
 
   core:boot)
     quarry core:boot:service "quarrycore-etcd" "quarry/etcd" "-p 4001:4001 -p 7001:7001"
-    quarry core:boot:service "quarrycore-registry" "quarry/registry" "-p 5000:5000"
+    #quarry core:boot:service "quarrycore-registry" "quarry/registry" "-p 5000:5000"
     ;;
 
   core:boot:service)
@@ -27,7 +27,7 @@ case "$1" in
 
   core:reset)
     quarry core:reset:service quarrycore-etcd
-    quarry core:reset:service quarrycore-registry
+    #quarry core:reset:service quarrycore-registry
     ;;
 
   core:reset:service)

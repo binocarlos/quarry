@@ -6,64 +6,127 @@ case "$1" in
   deploy)
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
+
+    # the folder that contains the deployment layout
     BUILD_DIR="$STACK_DIR/build";
+
+    # copy the current deployment into the previous state
     DEPLOY_DIR="$STACK_DIR/deploy";
 
     mkdir -p $DEPLOY_DIR
-    mkdir -p $DEPLOY_DIR/env
-    mkdir -p $DEPLOY_DIR/services
+    
+    if [[ -d $DEPLOY_DIR/worker ]]; then
+      cp -rf $DEPLOY_DIR/worker $DEPLOY_DIR/previous
+    fi
+
+    mkdir -p $DEPLOY_DIR/service
+    mkdir -p $DEPLOY_DIR/worker
+
+    pluginhook pre-deploy $STACK
 
     # loop over the services and build them
     for servicefolder in $BUILD_DIR/service/* ; do
       servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
-      containername=$(cat $servicefolder/container)
-
-      if [[ -d $DEPLOY_DIR/services/$servicename ]]; then
-        pid=$(cat $DEPLOY_DIR/services/$servicename/pid);
-        host=$(cat $DEPLOY_DIR/services/$servicename/host);
-
-
-        echo "    -----> Ensure Service $servicename - $containername ..."  
-      else
-        echo "    -----> Init Service $servicename - $containername ..."
-
-        host=$(quarry host)
-
-        boot=$(quarry deploy:generate_node $STACK service/$servicename);
-
-        echo "BOOT $boot"
-
-      fi
-
+      quarry deploy:service $STACK $servicename
     done
 
     # loop over the workers and build them
     for workerfolder in $BUILD_DIR/worker/* ; do
       workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
-      containername=$(cat $workerfolder/container)
-
-      echo "    -----> Deploy $workername - $containername ..."
-      #quarry build:node $workerfolder
-      
+      quarry deploy:worker $STACK $workername
     done
+
+    pluginhook post-deploy $STACK
+    ;;
+
+  # kill the containers from the old stack
+  deploy:cleanup)
+    echo "KILL OLD STACK"
+    ;;
+
+  deploy:worker)
+    STACK="$2";
+    WORKER="$3";
+    ;;
+
+  deploy:service)
+    STACK="$2";
+    SERVICE="$3";
+
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build";
+    DEPLOY_DIR="$STACK_DIR/deploy/service";
+
+    servicefolder="$BUILD_DIR/service/$SERVICE"
+    nodename="$STACK-service-$SERVICE"
+
+    # is the service running - the cid file will be full if yes
+    cidfile="$DEPLOY_DIR/$SERVICE.cid"
+    
+    # there is a cidfile - check it is actuall running
+    if [[ -f $cidfile ]]; then
+
+      running=$(docker ps | grep "$nodename" | awk '{ print $1 }' || echo)
+
+      if [[ -z $running ]]; then
+        rm -f $cidfile
+      fi
+
+    fi
+
+    # we need to boot the service
+    if [[ ! -f $cidfile ]]; then
+
+      docker rm $nodename
+      
+      opts=$(quarry deploy:generate_opts $STACK service/$servicename);
+      container=$(cat $servicefolder/container)
+      opts=$(quarry deploy:generate_opts $STACK service/$SERVICE);
+
+      echo "    -----> Init Service $SERVICE - $container ..."
+      echo "            $opts"
+
+      cid=$(docker run -d -t -name $nodename $opts $container)
+      echo "running - $cid"
+      
+      echo $cid > $cidfile
+      
+    fi
     ;;
 
   # get the docker command to boot the node
-  deploy:generate_node)
+  deploy:generate_opts)
     STACK="$2";
     NODE="$3";
-    NODE_DIR="$QUARRY_ROOT/$STACK/build/$NODE";
-    container=`cat $NODE_DIR/container`
-    cmd="docker run -d"
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    NODE_DIR="$STACK_DIR/build/$NODE";
 
+    opts=""
+
+    # PORTS
     if [[ -f "$NODE_DIR/expose" ]]; then
       ports=`cat $NODE_DIR/expose`
       for port in "${ports[@]}"
       do
-        if [[ $port =~ ^[0-9]+$ ]] ; then $port="$port:$port"; fi
-        $cmd="$cmd -p $port"
+        opts="$opts -p $port"
       done
     fi
+
+    # VOLUMES
+    if [[ -f "$NODE_DIR/volumes" ]]; then
+      volumes=`cat $NODE_DIR/volumes`
+      DATA_DIR="$STACK_DIR/volumes/$NODE";
+      mkdir -p $DATA_DIR
+      for volume in "${volumes[@]}"
+      do
+        hostvolume="$DATA_DIR$volume";
+        mkdir -p $hostvolume
+        #echo "volume: $hostvolume:$volume"
+        opts="$opts -v $hostvolume:$volume"
+      done
+    fi
+
+    echo $opts
     ;;
 
 

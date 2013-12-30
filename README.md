@@ -182,18 +182,6 @@ It says - boot a container based on the "quarry/mongo" image and expose the foll
  * MONGO_PORT_27017_TCP_ADDR=172.17.0.8
  * MONGO_PORT_27017_TCP_PORT=1234
 
-The name of the environment variables is decided by:
-
- * the name of the service (mongo)
- * the ports exposed by the service (27017)
-
-The pattern is:
-
-```
-<NAME>_PORT_<PORT>
-MONGO_PORT_27017
-```
-
 This is the same pattern as the [Docker Link Command](http://docs.docker.io/en/latest/use/working_with_links_names/).
 
 Other nodes in the stack can use these environment variables to connect to the services.

@@ -22,6 +22,7 @@ case "$1" in
   build:folder)
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
+    pluginhook pre-build $STACK
     # compile the stack into a build folder
     buildid=$(docker run -d -v $STACK_DIR/buildtemp:/build -v $STACK_DIR/src:/src quarry/base quarry-cli build $STACK /src /build)
     test $(docker wait $buildid) -eq 0
@@ -50,6 +51,7 @@ case "$1" in
       quarry build:node $workerfolder
       
     done
+    pluginhook post-build $STACK
     ;;
 
   build:node)
@@ -59,11 +61,14 @@ case "$1" in
       # we build the docker file into a local image
       containername=$(cat $NODEFOLDER/container)
       reponame="$QUARRY_MASTER:5000/$containername"
-      echo "building $containername"
+      echo "building $reponame"
       docker build -t $reponame $NODEFOLDER/build
+      #
+      # NOTE - wait until we have multiple hosts
+      #
       # now commit the image to the master registry
-      echo "pushing $reponame"
-      docker push $reponame 1>&2
+      #echo "pushing $reponame"
+      #docker push $reponame 1>&2
       # write the image name (which is pointing to the registry)
       echo $reponame > $NODEFOLDER/container
     fi

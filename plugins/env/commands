@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -eo pipefail; [[ $QUARRY_TRACE ]] && set -x
 
+#
+#
+# NOTE - this should be writing and reading from an etcd server
+#
+# the file system is a start
+#
+#
+
 case "$1" in
 
   env)

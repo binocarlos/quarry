@@ -76,17 +76,29 @@ Builder.prototype.process_node = function(folder, node){
       'ADD . /srv/app'
     ]
 
-    if(node.install){
-      if(typeof(node.install)==='string'){
-        node.install = [node.install];
-      }
-
-      var installer = node.install.map(function(cmd){
-        return 'RUN cd /srv/app && ' + cmd;
-      }).join("\n")
-
-      Dockerfile.push(installer);
+    if(typeof(node.install)==='string'){
+      node.install = [node.install];
     }
+
+    var installer = node.install.map(function(cmd){
+      return 'RUN cd /srv/app && ' + cmd;
+    }).join("\n")
+
+    Dockerfile.push(installer);
+    
+    Dockerfile.push("ENTRYPOINT cd /srv/app && " + node.run);
+    Dockerfile = Dockerfile.join("\n");
+
+    fs.writeFileSync(folder + '/build/Dockerfile', Dockerfile, 'utf8');
+    node.container = id;
+  }
+  else if(node.run){
+    wrench.copyDirSyncRecursive(self.options.dir, folder + '/build');
+
+    var Dockerfile = [
+      'FROM ' + (node.container || 'quarry/node'),
+      'ADD . /srv/app'
+    ]
     
     Dockerfile.push("ENTRYPOINT cd /srv/app && " + node.run);
     Dockerfile = Dockerfile.join("\n");
@@ -109,7 +121,17 @@ Builder.prototype.process_node = function(folder, node){
   }
 
   if(node.expose && node.expose.length>0){
+    if(typeof(node.expose)==='string'){
+      node.expose = [node.expose];
+    }
     fs.writeFileSync(folder + '/expose', node.expose.join(" "), 'utf8');  
+  }
+
+  if(node.volumes && node.volumes.length>0){
+    if(typeof(node.volumes)==='string'){
+      node.volumes = [node.volumes];
+    }
+    fs.writeFileSync(folder + '/volumes', node.volumes.join(" "), 'utf8');  
   }
 
   fs.writeFileSync(folder + '/id', id, 'utf8');
