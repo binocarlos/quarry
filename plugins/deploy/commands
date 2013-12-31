@@ -8,6 +8,8 @@ case "$1" in
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build";
 
+    echo "deploy $STACK"
+
     quarry db:snapshot $STACK
 
     pluginhook pre-deploy $STACK
@@ -15,13 +17,14 @@ case "$1" in
     # loop over the services and build them
     for servicefolder in $BUILD_DIR/service/* ; do
       servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
+      
       quarry deploy:service $STACK $servicename
     done
 
     # loop over the workers and build them
     for workerfolder in $BUILD_DIR/worker/* ; do
       workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
-
+      
       quarry deploy:worker $STACK $workername
     done
 
@@ -30,20 +33,27 @@ case "$1" in
     quarry deploy:cleanup $STACK
 
     pluginhook post-deploy $STACK
+
+    echo
+    echo "$STACK deployed"
+    echo
     ;;
 
   # kill the containers from the old stack
   deploy:cleanup)
-    echo "KILL OLD STACK"
     STACK="$2";
     DB_DIR="$QUARRY_ROOT/$STACK/db"
+
+    echo "cleanup $STACK"
 
     if [[ -d "$DB_DIR/previous" ]]; then
       for workerfolder in $DB_DIR/previous/* ; do
         workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
-        previouscontainer=`cat $workerfolder/id`
-        echo "KILL PREVIOUS $workername $previouscontainer"
-        docker kill $previouscontainer || true
+        if [[ -f $workerfolder/id ]]; then
+          previouscontainer=`cat $workerfolder/id`
+          echo "kill $workername $previouscontainer"
+          id=$(docker kill $previouscontainer || true)
+        fi
       done
     fi
     
@@ -58,55 +68,65 @@ case "$1" in
 
     NODE="$STACK$WORKER"
 
+    echo
+    echo "deploy $STACK $WORKER"
+
     # boot the docker container for the worker
     if [[ -f $BUILD_DIR/container ]]; then
       container=$(cat $BUILD_DIR/container)
 
-      echo "    -----> Init Worker $WORKER - $container ..."
-
-      opts=$(quarry deploy:generate_opts $STACK worker/$WORKER);
+      port_opts=$(quarry deploy:port_opts $STACK worker/$WORKER);
+      volume_opts=$(quarry deploy:volume_opts $STACK worker/$WORKER);
       env=$(quarry env:docker $STACK)
 
       # BOOT SERVICE HERE
-      cid=$(docker run -d -t $opts $env $container)
+      cid=$(docker run -d -t $port_opts $volume_opts $env $container)
 
       # write the container
       quarry db:worker:set $STACK $WORKER id $cid
       quarry db:worker:set $STACK $WORKER container $container
-      quarry db:worker:set $STACK $WORKER opts "$opts"
+      quarry db:worker:set $STACK $WORKER port_opts "$port_opts"
+      quarry db:worker:set $STACK $WORKER volume_opts "$volume_opts"
       quarry db:worker:set $STACK $WORKER env "$env"
 
-      echo "$WORKER booted - $cid"
-      echo "          $opts"
-      echo "          $env"
+      echo "$WORKER booted"
+      #echo "          $opts"
+      #echo "          $env"
     fi
 
     # hook up the nginx-vhost with the domains
     if [[ -f $BUILD_DIR/domains ]]; then
 
-      host=$QUARRY_HOST
-      port=$(docker port $cid 80 | sed 's/^.*\://' || echo)
-
       domains=`cat $BUILD_DIR/domains`
       quarry db:worker:set $STACK $WORKER domains "$domains"
 
+      echo "    domains $domains"
       nginx-vhost domains $NODE $domains
 
       # this is a static node
       if [[ -f $BUILD_DIR/document_root ]]; then
         root=`cat $BUILD_DIR/document_root`
+        echo "    document_root $root"
         nginx-vhost document_root $NODE $STACK_DIR/src/$root
       else
+        host=$QUARRY_HOST
+        port=$(docker port $cid 80 | sed 's/^.*\://' || echo)
+        echo "    backends $NODE $host:$port"
         nginx-vhost backends $NODE $host:$port
       fi
 
     fi
+
+    echo
 
     ;;
 
   deploy:service)
     STACK="$2";
     SERVICE="$3";
+
+    echo
+    echo "deploy $STACK $SERVICE"
 
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build/service/$SERVICE";
@@ -117,42 +137,43 @@ case "$1" in
     running=$(docker ps | grep "$nodename" | awk '{ print $1 }' || echo)
     cid=$(quarry db:service:get $STACK $SERVICE id)
 
-    echo "    -----> Init Service $SERVICE - $container $cid ..."
-
     # this means the service is not running
     if [[ -z $running ]]; then
 
       # this means we have never run it
       if [[ -z $cid ]]; then
         
-        opts=$(quarry deploy:generate_opts $STACK service/$SERVICE);
+        port_opts=$(quarry deploy:port_opts $STACK service/$SERVICE);
+        volume_opts=$(quarry deploy:volume_opts $STACK service/$SERVICE);
 
         docker rm $nodename || true
         # BOOT SERVICE HERE
-        cid=$(docker run -d -t -name $nodename $opts $container)
+        cid=$(docker run -d -t -name $nodename $port_opts $volume_opts $container)
 
         # write the container
         quarry db:service:set $STACK $SERVICE id $cid
         quarry db:service:set $STACK $SERVICE name $nodename
         quarry db:service:set $STACK $SERVICE container $container
-        quarry db:service:set $STACK $SERVICE opts "$opts"
+        quarry db:service:set $STACK $SERVICE port_opts "$port_opts"
+        quarry db:service:set $STACK $SERVICE volume_opts "$volume_opts"
 
-        echo "$SERVICE booted - $cid"
-        echo "          $opts"
+        echo "$SERVICE booted"
 
       else
-        echo "$SERVICE restarting - $cid"
+        echo "$SERVICE restarting"
         docker start $cid
       fi
 
     # this means the service is already running
     else
 
-      echo "$SERVICE already running - $cid" 
+      echo "$SERVICE already running" 
 
     fi
 
     quarry deploy:write_service_env $STACK $SERVICE
+
+    echo
     ;;
 
   # get the env vars from a service node
@@ -188,7 +209,7 @@ case "$1" in
 
   # generate the docker run options for a node
   # volumes and ports
-  deploy:generate_opts)
+  deploy:port_opts)
     STACK="$2";
     NODE="$3";
     STACK_DIR="$QUARRY_ROOT/$STACK";
@@ -205,14 +226,24 @@ case "$1" in
       done
     fi
 
+    echo $opts
+    ;;
+
+  deploy:volume_opts)
+    STACK="$2";
+    NODE="$3";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    VOLUME_DIR="$QUARRY_ROOT/volumes/$STACK/$NODE"
+    NODE_DIR="$STACK_DIR/build/$NODE";
+
+    opts=""
+
     # VOLUMES
     if [[ -f "$NODE_DIR/volumes" ]]; then
       volumes=`cat $NODE_DIR/volumes`
-      DATA_DIR="$STACK_DIR/volumes/$NODE";
-      mkdir -p $DATA_DIR
       for volume in "${volumes[@]}"
       do
-        hostvolume="$DATA_DIR$volume";
+        hostvolume="$VOLUME_DIR$volume";
         mkdir -p $hostvolume
         #echo "volume: $hostvolume:$volume"
         opts="$opts -v $hostvolume:$volume"

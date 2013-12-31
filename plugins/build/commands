@@ -7,6 +7,7 @@ case "$1" in
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
 
+
     # reset the build folders
     rm -rf $STACK_DIR/buildtemp && mkdir -p $STACK_DIR/buildtemp
     rm -rf $STACK_DIR/build
@@ -23,9 +24,12 @@ case "$1" in
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
     pluginhook pre-build $STACK
+
+    echo "build $STACK"
+    echo "dir $STACK_DIR"
+    
     # compile the stack into a build folder
-    buildid=$(docker run -d -v $STACK_DIR/buildtemp:/build -v $STACK_DIR/src:/src quarry/base quarry-cli build $STACK /src /build)
-    test $(docker wait $buildid) -eq 0
+    docker run -i -v $STACK_DIR/buildtemp:/build -v $STACK_DIR/src:/src quarry/base quarry-cli build $STACK /src /build
 
     # copy the root owned build folder to a quarry owned one
     cp -r $STACK_DIR/buildtemp $STACK_DIR/build
@@ -34,10 +38,9 @@ case "$1" in
 
     # loop over the services and build them
     for servicefolder in $STACK_DIR/build/service/* ; do
-      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
-      containername=$(cat $servicefolder/container)
+      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')      
 
-      echo "    -----> Service $servicename - $containername ..."
+      echo "service $servicename"
       quarry build:node $servicefolder
 
     done
@@ -45,9 +48,8 @@ case "$1" in
     # loop over the workers and build them
     for workerfolder in $STACK_DIR/build/worker/* ; do
       workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
-      containername=$(cat $workerfolder/container)
 
-      echo "    -----> Worker $workername - $containername ..."
+      echo "worker $workername"
       quarry build:node $workerfolder
       
     done
@@ -61,7 +63,11 @@ case "$1" in
       # we build the docker file into a local image
       containername=$(cat $NODEFOLDER/container)
       reponame="$QUARRY_MASTER:5000/$containername"
+      echo
+      echo
       echo "building $reponame"
+      echo
+      echo
       docker build -t $reponame $NODEFOLDER/build
       #
       # NOTE - wait until we have multiple hosts

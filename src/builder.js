@@ -135,7 +135,7 @@ Builder.prototype.process_node = function(folder, node){
   }
 
   if(node.document_root){
-    fs.writeFileSync(folder + '/document_root', node.volumes.join(" "), 'utf8');   
+    fs.writeFileSync(folder + '/document_root', node.document_root, 'utf8');   
   }
 
   fs.writeFileSync(folder + '/node.json', JSON.stringify(node), 'utf8');
