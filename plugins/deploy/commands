@@ -25,6 +25,8 @@ case "$1" in
       quarry deploy:worker $STACK $workername
     done
 
+    nginx-vhost apply
+
     quarry deploy:cleanup $STACK
 
     pluginhook post-deploy $STACK
@@ -54,25 +56,51 @@ case "$1" in
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build/worker/$WORKER";
 
-    container=$(cat $BUILD_DIR/container)
+    NODE="$STACK$WORKER"
 
-    echo "    -----> Init Worker $WORKER - $container ..."
+    # boot the docker container for the worker
+    if [[ -f $BUILD_DIR/container ]]; then
+      container=$(cat $BUILD_DIR/container)
 
-    opts=$(quarry deploy:generate_opts $STACK worker/$WORKER);
-    env=$(quarry env:docker $STACK)
+      echo "    -----> Init Worker $WORKER - $container ..."
 
-    # BOOT SERVICE HERE
-    cid=$(docker run -d -t $opts $env $container)
+      opts=$(quarry deploy:generate_opts $STACK worker/$WORKER);
+      env=$(quarry env:docker $STACK)
 
-    # write the container
-    quarry db:worker:set $STACK $WORKER id $cid
-    quarry db:worker:set $STACK $WORKER container $container
-    quarry db:worker:set $STACK $WORKER opts "$opts"
-    quarry db:worker:set $STACK $WORKER env "$env"
+      # BOOT SERVICE HERE
+      cid=$(docker run -d -t $opts $env $container)
 
-    echo "$WORKER booted - $cid"
-    echo "          $opts"
-    echo "          $env"
+      # write the container
+      quarry db:worker:set $STACK $WORKER id $cid
+      quarry db:worker:set $STACK $WORKER container $container
+      quarry db:worker:set $STACK $WORKER opts "$opts"
+      quarry db:worker:set $STACK $WORKER env "$env"
+
+      echo "$WORKER booted - $cid"
+      echo "          $opts"
+      echo "          $env"
+    fi
+
+    # hook up the nginx-vhost with the domains
+    if [[ -f $BUILD_DIR/domains ]]; then
+
+      host=$QUARRY_HOST
+      port=$(docker port $cid 80 | sed 's/^.*\://' || echo)
+
+      domains=`cat $BUILD_DIR/domains`
+      quarry db:worker:set $STACK $WORKER domains "$domains"
+
+      nginx-vhost domains $NODE $domains
+
+      # this is a static node
+      if [[ -f $BUILD_DIR/document_root ]]; then
+        root=`cat $BUILD_DIR/document_root`
+        nginx-vhost document_root $NODE $STACK_DIR/src/$root
+      else
+        nginx-vhost backends $NODE $host:$port
+      fi
+
+    fi
 
     ;;
 
@@ -194,6 +222,52 @@ case "$1" in
     echo $opts
     ;;
 
+  deploy:kill)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build";
+
+    pluginhook pre-kill $STACK
+
+    # loop over the services and build them
+    for servicefolder in $BUILD_DIR/service/* ; do
+      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
+
+      id=$(quarry db:service:get $STACK $servicename id)
+      
+      if [[ ! -z $id ]]; then
+        docker kill $id
+      fi
+    done
+
+    # loop over the workers and build them
+    for workerfolder in $BUILD_DIR/worker/* ; do
+      workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+      NODE="$STACK$workername"
+
+      id=$(quarry db:worker:get $STACK $workername id)
+      domains=$(quarry db:worker:get $STACK $workername domains)
+      
+      if [[ ! -z $id ]]; then
+        docker kill $id
+      fi
+
+      if [[ ! -z $domains ]]; then
+        nginx-vhost remove $NODE
+      fi
+
+    done
+
+    nginx-vhost apply
+    ;;
+
+  deploy:remove)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    quarry deploy:kill $STACK
+
+    rm -rf $STACK_DIR
+    ;;
 
   help)
     cat

@@ -35,10 +35,17 @@ case "$1" in
     STACK="$2";
 
     folder=$(mktemp -d)
-    cp -r $QUARRY_ROOT/env/* $folder
+
+    for envfile in $(find $QUARRY_ROOT/env -type f); do
+      cp -f $envfile $folder
+    done
+
     if [[ ! -z $STACK ]]; then
-      cp -r $QUARRY_ROOT/$STACK/env/* $folder
+      for envfile in $(find $QUARRY_ROOT/$STACK/env -type f); do
+        cp -f $envfile $folder
+      done
     fi
+
     env=""
     for envfile in $folder/* ; do
       envname=$(echo $envfile | awk -F/ '{print $(NF)}')
