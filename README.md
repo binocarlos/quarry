@@ -1,50 +1,42 @@
 quarry
 ======
 
-A [Docker](https://docker.io) and [etcd](https://github.com/coreos/etcd) based tool that deploys application stacks with a git push.
+A git push stack deployment tool written in bash, using [Docker](https://docker.io) and heavily inspired by [Dokku](https://github.com/progrium/dokku).
 
-Much inspiration taken from [Dokku](https://github.com/progrium/dokku).
+Define your stack in a .yml file in the root of a repository - git push to quarry and it will spin up the services and worker nodes and route HTTP traffic to the web servers.
 
 ```
-       Internet
-
+        HTTP
           |
+     nginx router
           |
-
-       Edge Tier
-                                
-       /  |  \                  
-      /   |   \
- xyz.com  |  abc.com
-
-      Web Tier ------
-                      \ 
-     \/   |   \/       \      
-     /\   |   /\       /  Database Tier       
-    /  \  |  /  \     /
-                     /
-     Worker Tier ---
-
+         / \
+ xyz.com     abc.com
+    |           |
+----------------------
+|                    |
+|     Web Workers    |
+|   Backend Workers  | --- docker
+|      Services      |     containers
+|                    |
+----------------------
+          ^
+          ^
+          ^
+git push quarry master
 ```
-## installation
-
-```
-$ wget -qO- https://raw.github.com/binocarlos/quarry/master/bootstrap.sh | sudo bash
-```
-
-Do this on your local development machine and on a new cloud server - 3.8 kernel needed
-
-Generate SSH keys on your local machine and then:
-
-```
-$ cat ~/.ssh/id_rsa.pub | ssh myserver.com "sudo gitreceive upload-key user"
-```
-
-Replace 'myserver.com' with your live deploy hostname and 'me' with a tag for the key you added
 
 ## example stack
 
-A quarry.yml that boots a stack with database, web and backend nodes.
+Each quarry stack has a quarry.yml file in it's root.
+
+This file describes what 'services' and 'workers' will be deployed when push to the server.
+
+Services are long running things like databases that are not part of the codebase and do not restart on each push.
+
+Workers are processes that restart on each push and usually make use of the codebase (e.g. node src/myserver.js).
+
+Here is an example stack that defines 2 services (Mongo + Redis) and 1 web application and 1 static website.
 
 ```yaml
 # a mongo database service
@@ -72,66 +64,87 @@ app:
 		- myapp.com
 		- *.myapp.com
 
-# a worker running node.js code
-db:
+# a static website
+website:
 	type: worker
-	container: quarry/node
-	install:
-		- cd src/db && npm install
-	run: node src/db/index.js
-	expose:
-		- 8791
+	document_root: src/website/www
+	domains:
+		- mydomain.com
+		- *.mydomain.com
 ```
 
+## installation
+
+Run this on a nice and fresh cloud server - one that you have root ssh access to.
+
+```
+$ wget -qO- https://raw.github.com/binocarlos/quarry/master/bootstrap.sh | sudo bash
+```
+
+Then - generate SSH keys on your local machine and send them to your new server:
+
+```
+$ cat ~/.ssh/id_rsa.pub | ssh nicenewserver.com "sudo sshcommand acl-add quarry me"
+```
+
+Replace 'nicenewserver.com' with your server hostname and 'me' with your name (which represents the key you just uploaded)
+
+You are ready to start pushing code!
+
+Change to your project folder and add the quarry remote and push:
+```
+$ cd ~/myproject
+$ git remote add quarry quarry@nicenewserver.com:myproject
+$ git push quarry master
+```
+
+### development
+
+You can use the included Vagrantfile to boot into a linux with docker installed (for Windows or Mac users).
+
+```
+$ cd quarry
+$ vagrant up
+```
+
+Once the image has booted and you have SSH'd into the vagrant box:
+
+```
+$ wget -qO- https://raw.github.com/binocarlos/quarry/master/bootstrap.sh | sudo bash
+```
 
 ## configure
 
 To deploy a stack to quarry you need a git repository with a 'quarry.yml' at the root of the repo.
 
-Each top level entry in the YAML file is a node in the stack:
+Each top level entry in the YAML file is a node in the stack that will be booted when you git push to quarry:
 
 ```yaml
 nodename:
-	type: nodetype
+	type: service|worker
 ```
 
-The type setting of each node decides how the rest of the config is interpreted.
-
-The type drives the quarry module system allowing other new exotic types to be added later.
+The 'type' setting of each node decides how the rest of the config is interpreted.
 
  * service - nodes that are started once and remain running (e.g. database servers)
  * worker - backend nodes that can expose TCP ports to other nodes and expose domains to the HTTP router
 
-### nodes
-Nodes in a quarry stack are service, web or worker nodes.
-
-For each, there are a few important settings:
+For each, there are a few core settings:
 
  * container - what Docker image the node is based on
  * install - the command that installs the node's dependencies
  * run - the command that will execute the node
 
-#### container 
-Defines the image the node will boot into.
+Container defines what docker image the node will use.
 
-This is either a repository in the [Docker Index](https://index.docker.io/) or it is a local path to a Dockerfile.
-
-Here is a node that is running based on the quarry/node image:
-
-```yaml
-nodejs_worker:
-  type: worker
-  container: quarry/node
-  install: cd src/worker && npm install
-  run: node src/worker/index.js
-```
+This is either a repository in the [Docker Index](https://index.docker.io/) or it is a path to a Dockerfile inside the repository.
 
 Here is a node that is running from a custom Docker container build:
 
 ```yaml
 custom_nodejs_worker:
 	type: worker
-	container ./src/worker/Dockerfile
+	container ./src/worker
 ```
 
 and the contents of ./src/worker/Dockerfile
@@ -145,18 +158,30 @@ EXPOSE 8791
 ENTRYPOINT ["node", "/srv/workerapp/index.js"]
 ```
 
+You can also define 'install' and 'run' steps in the quarry.yml.
+
+Here is a node that is running based on the quarry/node image from the index but with custom installation and run steps layered over (in a automated Dockerfile):
+
+```yaml
+nodejs_worker:
+  type: worker
+  container: quarry/node
+  install: cd src/worker && npm install
+  run: node src/worker/index.js
+```
+
+This will be translated into the following Dockerfile:
+
+```
+FROM quarry/node
+RUN cd /srv/app/src/worker && npm install
+RUN useradd some-funky-user-thing
+ENTRYPOINT node /srv/app/src/worker/index.js
+```
+
+Notice how the paths have been translated - it is important that you keep paths relative in your quarry.yml
+
 The [Dockerfile Reference](http://docs.docker.io/en/latest/use/builder) is a good place to learn about Dockerfile commands.
-
-#### install
-
-The command that will prepare the node before running it.  The install command is optional as you can also do your installation steps using a custom Dockerfile.
-
-The command will be run from the root of the application repo.
-
-#### run
-The command that will run the node itself.
-
-The command will be run from the root of the application repo.
 
 ### type: service
 
@@ -174,7 +199,7 @@ mongo:
 		- 27017
 ```
 
-It says - boot a container based on the "quarry/mongo" image and expose the following environment variables to web and worker nodes:
+It says - boot a container based on the "quarry/mongo" image and expose the following environment variables to the worker nodes:
 
  * MONGO_PORT=tcp://172.17.0.8:1234
  * MONGO_PORT_27017_TCP=tcp://172.17.0.8:1234
@@ -184,16 +209,15 @@ It says - boot a container based on the "quarry/mongo" image and expose the foll
 
 This is the same pattern as the [Docker Link Command](http://docs.docker.io/en/latest/use/working_with_links_names/).
 
-Other nodes in the stack can use these environment variables to connect to the services.
+Worker nodes in the stack can use these environment variables to connect to the services.
+
+Why not just use the docker link feature? Because quarry will soon have a multi-host meaning containers can still connect to each other even on different servers.
 
 ### type: worker
 
-A worker node is a long running process that can do either of 2 things:
+A worker is a long running process that restarts on each push.
 
- * expose domains to the front-end HTTP router (for web-apps)
- * expose TCP ports to other nodes in the stack (for backend workers)
-
-If a node has a 'domains' setting - the front end router will direct HTTP traffic to it.
+If a worker has a 'domains' setting - the front end router will direct HTTP traffic to it.
 
 Here is an example of a web node with some domains for the router:
 
@@ -204,36 +228,10 @@ webnode:
   	- efg.com
 ```
 
-Worker nodes can also expose ports like services.
+This means any requests for either 'abc.com' or 'efg.com' will end up at this node.
 
-quarry comes with an etcd server running on each instance and each stack will register it's endpoints with the etcd server.
+If a worker has a 'document_root' setting it means that the node is a static website and nginx will just serve the files from it.
 
-The pattern of etcd node registration is:
+## licence
 
-	/stackname/nodename/pid
-
-So - if we have a 'db' worker running in a 'test' stack - we can read all endpoints using:
-
-```
-curl -L http://127.0.0.1:4001/v2/keys/test/backend
-```
-
-Each node can access the etcd connection values from it's environment:
-
-Here is an example using [Yoda](https://github.com/binocarlos/yoda) to keep track of 'backend' nodes in the stack:
-
-```js
-var Yoda = require('yoda');
-
-var hostname = process.env.ETCD_PORT_4001_TCP_ADDR;
-var port = process.env.ETCD_PORT_4001_TCP_PORT;
-
-var yoda = new Yoda(hostname, port);
-
-// we are running in a 'test' stack and we want 'backend' endpoints:
-var location = yoda.connect('/test/backend');
-
-location.on('add', function(route, endpoint){
-	// here we can connect to our backend worker
-})
-```
+MIT

@@ -1,7 +1,7 @@
 {
   "name": "quarry",
   "version": "0.0.1",
-  "description": "node.js stack deployment with docker",
+  "description": "stack deployment with docker",
   "main": "src/index.js",
   "preferGlobal": "true",
   "bin": {

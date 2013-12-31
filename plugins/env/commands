@@ -16,6 +16,8 @@ case "$1" in
 
     folder=$(mktemp -d)
 
+    mkdir -p $QUARRY_ROOT/env
+
     for envfile in $(find $QUARRY_ROOT/env -type f); do
       cp -f $envfile $folder
     done

@@ -30,7 +30,7 @@ core: quarry-base
 quarry-base:
 	docker build -t quarry/base .
 
-dependencies: sshcommand docker network
+dependencies: sshcommand docker network nginx-vhost
 
 sshcommand:
 	wget -qO /usr/local/bin/sshcommand ${SSHCOMMAND_URL}

@@ -29,5 +29,5 @@ fi
 make install
 
 echo
-echo "Almost done! For next steps on configuration:"
-echo "  https://github.com/binocarlos/quarry#configuring"
+echo "quarry is installed! Add a user from your development machine to push stacks - see:"
+echo "  https://github.com/binocarlos/quarry"
