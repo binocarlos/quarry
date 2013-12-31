@@ -27,10 +27,12 @@ case "$1" in
     quarry deploy $STACK
     ;;
 
-  host)
-    echo $QUARRY_HOST
+  testbuild)
+    APP="$2";
+    SOURCE_FOLDER=`pwd`
+    tar --exclude=.git -c . | quarry receive $APP
     ;;
-
+    
   cleanup)
     # delete all non-running container
     docker ps -a | grep 'Exit' |  awk '{print $1}' | xargs docker rm &> /dev/null &
