@@ -58,7 +58,7 @@ Builder.prototype.filepath = function(){
 	return this.options.dir + '/quarry.yml';
 }
 
-Builder.prototype.process_node = function(folder, node){
+Builder.prototype.build_node = function(folder, node){
   var self = this;
   var id = self.options.id + "/" + node.name;
 
@@ -73,7 +73,7 @@ Builder.prototype.process_node = function(folder, node){
 
     var Dockerfile = [
       'FROM ' + (node.container || 'quarry/node'),
-      'ADD . /srv/app'
+      'ADD . /srv/quarryapp'
     ]
 
     if(typeof(node.install)==='string'){
@@ -81,12 +81,12 @@ Builder.prototype.process_node = function(folder, node){
     }
 
     var installer = node.install.map(function(cmd){
-      return 'RUN cd /srv/app && ' + cmd;
+      return 'RUN cd /srv/quarryapp && ' + cmd;
     }).join("\n")
 
     Dockerfile.push(installer);
     
-    Dockerfile.push("ENTRYPOINT cd /srv/app && " + node.run);
+    Dockerfile.push("ENTRYPOINT cd /srv/quarryapp && " + node.run);
     Dockerfile = Dockerfile.join("\n");
 
     fs.writeFileSync(folder + '/build/Dockerfile', Dockerfile, 'utf8');
@@ -95,19 +95,27 @@ Builder.prototype.process_node = function(folder, node){
   else if(node.run){
     wrench.copyDirSyncRecursive(self.options.dir, folder + '/build');
 
+    if(typeof(node.run)!=='string'){
+      node.run = node.run.join(' && ');
+    }
+
     var Dockerfile = [
       'FROM ' + (node.container || 'quarry/node'),
-      'ADD . /srv/app'
+      'ADD . /srv/quarryapp'
     ]
     
-    Dockerfile.push("ENTRYPOINT cd /srv/app && " + node.run);
+    Dockerfile.push("ENTRYPOINT cd /srv/quarryapp && " + node.run);
     Dockerfile = Dockerfile.join("\n");
 
     fs.writeFileSync(folder + '/build/Dockerfile', Dockerfile, 'utf8');
     node.container = id;
   }
 
-  if(node.domains && node.domains.length>0){
+  if(node.domains){
+    if(typeof(node.domains)==='string' && fs.existsSync(path.normalize(self.options.dir + '/' + node.domains))){
+      var domaintxt = fs.readFileSync(path.normalize(self.options.dir + '/' + node.domains), 'utf8');
+      node.domains = domaintxt.split("\n");
+    }
     if(!node.expose){
       node.expose = [];
     }
@@ -138,12 +146,17 @@ Builder.prototype.process_node = function(folder, node){
     fs.writeFileSync(folder + '/document_root', node.document_root, 'utf8');   
   }
 
-  fs.writeFileSync(folder + '/node.json', JSON.stringify(node), 'utf8');
-  fs.writeFileSync(folder + '/id', id, 'utf8');
-
   if(node.container){
     fs.writeFileSync(folder + '/container', node.container, 'utf8');  
   }
+
+  if(node.global){
+    fs.writeFileSync(folder + '/global', node.global, 'utf8');  
+  }
+
+  fs.writeFileSync(folder + '/node.json', JSON.stringify(node), 'utf8');
+
+  
   
 }
 
@@ -153,13 +166,13 @@ Builder.prototype.build = function(folder, done){
   this.nodes.service.forEach(function(service){
     var service_root = folder + '/service/' + service.name;
     wrench.mkdirSyncRecursive(service_root);
-    self.process_node(service_root, service);
+    self.build_node(service_root, service);
   })
 
   this.nodes.worker.forEach(function(worker){
     var worker_root = folder + '/worker/' + worker.name;
     wrench.mkdirSyncRecursive(worker_root);
-    self.process_node(worker_root, worker);
+    self.build_node(worker_root, worker);
   })
 
   done && done();

@@ -14,16 +14,18 @@ Define your stack in a .yml file in the root of a repository - git push to quarr
  xyz.com     abc.com
     |           |
 ----------------------
+|    quarry stack    |
+----------------------
 |                    |
-|     Web Workers    |
-|   Backend Workers  | --- docker
+|      Workers       |
+|                    | --- docker
 |      Services      |     containers
 |                    |
 ----------------------
           ^
           ^
           ^
-git push quarry master
+$ git push quarry master
 ```
 
 ## example stack

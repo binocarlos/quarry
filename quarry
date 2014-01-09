@@ -40,6 +40,810 @@ case "$1" in
     docker images | grep '<none>' |  awk '{print $3}'  | xargs docker rmi &> /dev/null &
     ;;
 
+  #
+  #
+  #
+  # db
+  #
+  #
+  #
+
+  # prepare the folders for the db
+  db:prepare)
+    STACK="$2";
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+
+    mkdir -p $DB_DIR/service
+    ;;
+
+  # get the deploy counter
+  db:counter)
+    STACK="$2";
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+
+    if [[ -f $DB_DIR/counter ]]; then
+      counter=$(cat $DB_DIR/counter)
+    else
+      counter=1
+    fi
+    echo $counter;
+    ;;
+
+  # get the deploy counter
+  db:counter:inc)
+    STACK="$2";
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+    counter=$(quarry db:counter $STACK)
+    counter=`expr $counter + 1`
+    echo $counter > $DB_DIR/counter
+    echo $counter
+    ;;
+
+  # copy the current worker folder into the previous folder
+  db:snapshot)
+    STACK="$2";
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+
+    quarry db:prepare $STACK
+
+    rm -rf $DB_DIR/previous
+
+    if [[ -d $DB_DIR/worker ]]; then
+      cp -rf $DB_DIR/worker $DB_DIR/previous
+    fi
+    ;;
+
+  db:service:list)
+    STACK="$2";
+    DB_DIR="$QUARRY_ROOT/$STACK/db/service"
+    list=""
+    for servicefolder in $DB_DIR/* ; do
+      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
+      list="$list $servicename"
+    done
+    echo $list
+    ;;
+
+  db:service:id)
+    STACK="$2";
+    SERVICE="$3";
+    quarry db:service:get $STACK $SERVICE id
+    ;;
+
+  db:service:get)
+    STACK="$2";
+    SERVICE="$3";
+    FILE="$4";
+
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+    FULLPATH="$DB_DIR/service/$SERVICE/$FILE"
+
+    if [[ -f $FULLPATH ]]; then
+      cat $FULLPATH
+    else
+      echo ""
+    fi
+    ;;
+
+  db:service:set)
+    STACK="$2";
+    SERVICE="$3";
+    FILE="$4";
+    VALUE="$5";
+
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+    FOLDER="$DB_DIR/service/$SERVICE"
+    FULLPATH="$FOLDER/$FILE"
+
+    mkdir -p $FOLDER
+  
+    echo $VALUE > $FULLPATH
+    ;;
+
+  db:worker:id)
+    STACK="$2";
+    SERVICE="$3";
+    quarry db:service:get $STACK $SERVICE id
+    ;;
+
+  db:worker:get)
+    STACK="$2";
+    WORKER="$3";
+    FILE="$4";
+
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+    FULLPATH="$DB_DIR/worker/$WORKER/$FILE"
+
+    if [[ -f $FULLPATH ]]; then
+      cat $FULLPATH
+    else
+      echo ""
+    fi
+    ;;
+
+  db:worker:set)
+    STACK="$2";
+    WORKER="$3";
+    FILE="$4";
+    VALUE="$5";
+
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+    FOLDER="$DB_DIR/worker/$WORKER"
+    FULLPATH="$FOLDER/$FILE"
+
+    mkdir -p $FOLDER
+  
+    echo $VALUE > $FULLPATH
+    ;;
+
+  #
+  #
+  #
+  # env
+  #
+  #
+  #
+
+  env)
+    STACK="$2";
+
+    if [[ -z $STACK ]]; then
+      echo "usage: quarry env <stackname>";
+      exit 1;
+    fi
+
+    folder=$(mktemp -d)
+
+    mkdir -p $QUARRY_ROOT/env
+
+    for envfile in $(find $QUARRY_ROOT/env -type f); do
+      cp -f $envfile $folder
+    done
+
+    if [[ ! -z $STACK ]]; then
+      for envfile in $(find $QUARRY_ROOT/$STACK/env -type f); do
+        cp -f $envfile $folder
+      done
+    fi
+
+    env=""
+    for envfile in $folder/* ; do
+      envname=$(echo $envfile | awk -F/ '{print $(NF)}')
+      envvalue=$(cat $envfile)
+      echo "$envname=$envvalue"
+    done
+    rm -rf $folder
+    ;;
+
+
+  env:cmd)
+    STACK="$2";
+
+    folder=$(mktemp -d)
+
+    mkdir -p $QUARRY_ROOT/env
+
+    for envfile in $(find $QUARRY_ROOT/env -type f); do
+      cp -f $envfile $folder
+    done
+
+    if [[ ! -z $STACK ]]; then
+      for envfile in $(find $QUARRY_ROOT/$STACK/env -type f); do
+        cp -f $envfile $folder
+      done
+    fi
+
+    env=""
+    for envfile in $folder/* ; do
+      envname=$(echo $envfile | awk -F/ '{print $(NF)}')
+      envvalue=$(cat $envfile)
+      env="$env $envname=$envvalue"
+    done
+    rm -rf $folder
+    echo $env
+    ;;
+
+  env:docker)
+    STACK="$2";
+
+    folder=$(mktemp -d)
+
+    mkdir -p $QUARRY_ROOT/env
+
+    for envfile in $(find $QUARRY_ROOT/env -type f); do
+      cp -f $envfile $folder
+    done
+
+    if [[ ! -z $STACK ]]; then
+      for envfile in $(find $QUARRY_ROOT/$STACK/env -type f); do
+        cp -f $envfile $folder
+      done
+    fi
+
+    env=""
+    for envfile in $folder/* ; do
+      envname=$(echo $envfile | awk -F/ '{print $(NF)}')
+      envvalue=$(cat $envfile)
+      env="$env -e $envname=$envvalue"
+    done
+    rm -rf $folder
+    echo "$env"
+    ;;
+
+  env:writenode)
+    STACK="$2";
+    basename="$3";
+    host="$4";
+    port="$5";
+    global="$6";
+
+    quarry env:stack:set $STACK ${basename}_TCP tcp://$host:$port
+    quarry env:stack:set $STACK ${basename}_TCP_PROTO tcp
+    quarry env:stack:set $STACK ${basename}_TCP_ADDR $host
+    quarry env:stack:set $STACK ${basename}_TCP_PORT $port
+    
+    if [[ ! -z $global ]]; then
+      quarry env:global:set ${basename}_TCP tcp://$host:$port
+      quarry env:global:set ${basename}_TCP_PROTO tcp
+      quarry env:global:set ${basename}_TCP_ADDR $host
+      quarry env:global:set ${basename}_TCP_PORT $port
+    fi
+    ;;
+
+  env:stack:set)
+    STACK="$2";
+    NAME="$3";
+    VALUE="$4";
+
+    ENV_DIR="$QUARRY_ROOT/$STACK/env";
+    mkdir -p $ENV_DIR
+    echo $VALUE > $ENV_DIR/$NAME
+    ;;
+
+  env:stack:get)
+    STACK="$2";
+    NAME="$3";
+    ENV_DIR="$QUARRY_ROOT/$STACK/env";
+    mkdir -p $ENV_DIR
+    cat $ENV_DIR/$NAME
+    ;;
+
+  # get the docker command to boot the node
+  env:global:set)
+    NAME="$2";
+    VALUE="$3";
+
+    ENV_DIR="$QUARRY_ROOT/env";
+    mkdir -p $ENV_DIR
+    echo $VALUE > $ENV_DIR/$NAME
+    ;;
+
+  env:global:get)
+    NAME="$2";
+
+    ENV_DIR="$QUARRY_ROOT/env";
+    mkdir -p $ENV_DIR
+    cat $ENV_DIR/$NAME
+    ;;
+
+
+
+  #
+  #
+  #
+  # build
+  #
+  #
+  #
+
+  build)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+
+
+    # reset the build folders
+    rm -rf $STACK_DIR/buildtemp && mkdir -p $STACK_DIR/buildtemp
+    rm -rf $STACK_DIR/build
+    rm -rf $STACK_DIR/src && mkdir -p $STACK_DIR/src
+
+    # incoming tar stream -> /home/quarry/appname/src.tar
+    cat > $STACK_DIR/src.tar
+    cat $STACK_DIR/src.tar | tar -xC $STACK_DIR/src
+
+    quarry build:folder $STACK
+    ;;
+
+  build:folder)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    pluginhook pre-build $STACK
+
+    echo "build $STACK"
+    echo "dir $STACK_DIR"
+    
+    # compile the stack into a build folder
+    docker run -i -v $STACK_DIR/buildtemp:/build -v $STACK_DIR/src:/src quarry/base quarry-cli build $STACK /src /build
+
+    # copy the root owned build folder to a quarry owned one
+    cp -r $STACK_DIR/buildtemp $STACK_DIR/build
+    docker run -i -v $STACK_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build/*"
+    rm -rf $STACK_DIR/buildtemp
+
+    # loop over the services and build them
+    for servicefolder in $STACK_DIR/build/service/* ; do
+      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')      
+
+      echo "service $servicename"
+      quarry build:node $STACK $servicefolder
+
+    done
+
+    # loop over the workers and build them
+    for workerfolder in $STACK_DIR/build/worker/* ; do
+      workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+
+      echo "worker $workername"
+      quarry build:node $STACK $workerfolder
+      
+    done
+    pluginhook post-build $STACK
+    ;;
+
+  build:node)
+    STACK="$2"
+    NODEFOLDER="$3";
+    # build the service container
+    if [[ -f "$NODEFOLDER/build/Dockerfile" ]]; then
+      # we build the docker file into a local image
+      containername=$(cat $NODEFOLDER/container)
+      reponame="$containername"
+      echo
+      echo
+      echo "building $reponame"
+      echo
+      echo
+      docker build -t $reponame $NODEFOLDER/build
+      #
+      # NOTE - wait until we have multiple hosts
+      #
+      # now commit the image to the master registry
+      #echo "pushing $reponame"
+      #docker push $reponame 1>&2
+      # write the image name (which is pointing to the registry)
+      echo $reponame > $NODEFOLDER/container
+    fi
+
+    rm -rf $NODEFOLDER/build
+    ;;
+
+
+
+  #
+  #
+  #
+  # deploy
+  #
+  #
+  #
+
+  deploy)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build";
+
+    echo "deploy $STACK"
+
+    quarry db:snapshot $STACK
+
+    pluginhook pre-deploy $STACK
+
+    counter=$(quarry db:counter:inc $STACK)
+    
+    quarry deploy:services $STACK
+    quarry deploy:workers $STACK $counter
+
+
+    sleep 2
+    nginx-vhost apply
+
+    quarry deploy:cleanup $STACK
+
+    pluginhook post-deploy $STACK
+
+    echo
+    echo "$STACK deployed"
+    echo
+    ;;
+
+  deploy:services)
+
+    STACK="$2";
+    DEV="$3";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build";
+
+    # loop over the services and build them
+    for servicefolder in $BUILD_DIR/service/* ; do
+      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
+      
+      quarry deploy:service $STACK $servicename $DEV
+    done
+
+    ;;
+
+  deploy:workers)
+
+    STACK="$2";
+    counter="$3";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build";
+
+    # loop over the workers and build them
+    for workerfolder in $BUILD_DIR/worker/* ; do
+      workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+      
+      quarry deploy:worker $STACK $workername "$STACK-$workername-$counter"
+    done
+
+    ;;
+
+  # kill the containers from the old stack
+  deploy:cleanup)
+    STACK="$2";
+    DB_DIR="$QUARRY_ROOT/$STACK/db"
+
+    echo "cleanup $STACK"
+
+    if [[ -d "$DB_DIR/previous" ]]; then
+      for workerfolder in $DB_DIR/previous/* ; do
+        workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+        if [[ -f $workerfolder/id ]]; then
+          previouscontainer=`cat $workerfolder/id`
+          echo "kill $workername $previouscontainer"
+          id=$(docker kill $previouscontainer || true)
+        fi
+      done
+    fi
+    
+    ;;
+
+  deploy:worker)
+    STACK="$2";
+    WORKER="$3";
+    NAME="$4"
+
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build/worker/$WORKER";
+
+    NODE="$STACK$WORKER"
+
+    echo
+    echo "deploy $STACK $WORKER"
+
+    # boot the docker container for the worker
+    if [[ -f $BUILD_DIR/container ]]; then
+      container=$(cat $BUILD_DIR/container)
+
+      port_opts=$(quarry deploy:port_opts $STACK worker/$WORKER);
+      volume_opts=$(quarry deploy:volume_opts $STACK worker/$WORKER);
+      env=$(quarry env:docker $STACK)
+
+      # BOOT SERVICE HERE
+      cid=$(docker run -d -t --name $NAME $port_opts $volume_opts $env $container)
+
+      echo "docker run -d -t --name $NAME $port_opts $volume_opts $env $container"
+      echo $cid
+
+      # write the container
+      quarry db:worker:set $STACK $WORKER id $cid
+      quarry db:worker:set $STACK $WORKER container $container
+      quarry db:worker:set $STACK $WORKER port_opts "$port_opts"
+      quarry db:worker:set $STACK $WORKER volume_opts "$volume_opts"
+      quarry db:worker:set $STACK $WORKER env "$env"
+
+      echo "$WORKER booted"
+      #echo "          $opts"
+      #echo "          $env"
+    fi
+
+    # hook up the nginx-vhost with the domains
+    if [[ -f $BUILD_DIR/domains ]]; then
+
+      domains=`cat $BUILD_DIR/domains`
+      quarry db:worker:set $STACK $WORKER domains "$domains"
+
+      echo "    domains $domains"
+      nginx-vhost domains $NODE $domains
+
+      # this is a static node
+      if [[ -f $BUILD_DIR/document_root ]]; then
+        root=`cat $BUILD_DIR/document_root`
+        echo "    document_root $root"
+        nginx-vhost document_root $NODE $STACK_DIR/src/$root
+      else
+        host=$QUARRY_HOST
+        port=$(docker port $cid 80 | sed 's/^.*\://' || echo)
+        echo "    backends $NODE $host:$port"
+        nginx-vhost backends $NODE $host:$port
+      fi
+
+    fi
+
+    echo
+
+    ;;
+
+  deploy:service)
+    STACK="$2";
+    SERVICE="$3";
+    DEV="$4";
+
+    echo
+    echo "deploy $STACK $SERVICE $DEV"
+
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build/service/$SERVICE";
+
+    nodename="$STACK-service-$SERVICE"
+    container=$(cat $BUILD_DIR/container)
+
+    running=$(docker ps | grep "$nodename" | awk '{ print $1 }' || echo)
+    cid=$(quarry db:service:get $STACK $SERVICE id)
+
+    should_boot=""
+    service_exists="yes"
+
+
+
+    # this means the service is not running
+    if [[ -z $running ]]; then
+
+      # this means we have never run it
+      if [[ -z $cid ]]; then
+        
+        should_boot="yes"
+
+      else
+        echo "$SERVICE restarting"
+        has_container=$(docker ps -a | grep "$cid" | awk '{ print $1 }' || echo)
+
+        if [[ -z $has_container ]]; then
+          cid=""
+          echo "NO CONTAINER"
+          should_boot="yes"
+        else
+          echo "STARTRING"
+          docker start $cid  
+        fi
+      fi
+
+    # this means the service is already running
+    else
+
+      echo "$SERVICE already running" 
+
+    fi
+
+
+    global=""
+
+    if [[ -f "$BUILD_DIR/global" ]]; then
+      globalsetting=$(cat $BUILD_DIR/global)
+
+      # this is the global one we boot it
+      if [ "$globalsetting" == "yes" ]; then
+        global="yes"
+      else
+        # check if the global container is running for us
+        globalrunning=$(docker ps | grep "$globalsetting" | awk '{ print $1 }' || echo)
+
+        # if it is then don't boot this service
+        if [[ ! -z $globalrunning ]]; then
+          should_boot=""
+          service_exists=""
+        fi
+      fi
+    fi
+
+
+    if [[ ! -z $should_boot ]]; then
+
+      docker rm $nodename || true
+
+      # BOOT SERVICE HERE
+      port_opts=$(quarry deploy:port_opts $STACK service/$SERVICE $DEV);
+      volume_opts=$(quarry deploy:volume_opts $STACK service/$SERVICE);
+      cid=$(docker run -d -t -name $nodename $port_opts $volume_opts $container)
+
+      echo "PORT: $port_opts"
+
+      # write the container
+      quarry db:service:set $STACK $SERVICE id $cid
+      quarry db:service:set $STACK $SERVICE name $nodename
+      quarry db:service:set $STACK $SERVICE container $container
+      quarry db:service:set $STACK $SERVICE port_opts "$port_opts"
+      quarry db:service:set $STACK $SERVICE volume_opts "$volume_opts"
+
+      echo "$SERVICE booted"
+    fi
+
+    if [[ ! -z $service_exists ]]; then
+      quarry deploy:write_service_env $STACK $SERVICE $global
+    fi
+
+    echo
+    ;;
+
+  # get the env vars from a service node
+  # write them to the stack env
+  deploy:write_service_env)
+    STACK="$2";
+    SERVICE="$3";
+    global="$4";
+    NAME=$(echo $SERVICE | sed 's/^.*\///' | awk '{print toupper($0)}')
+
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build/service/$SERVICE";
+
+    host=$QUARRY_HOST
+
+    cid=$(quarry db:service:get $STACK $SERVICE id)
+
+    # PORTS
+    if [[ -f "$BUILD_DIR/expose" ]]; then
+      ports=`cat $BUILD_DIR/expose`
+
+      for port in "${ports[@]}"
+      do
+      
+        container_port=$(echo $port | sed 's/^.*\://')
+        public_port=$(docker port $cid $container_port | sed 's/^.*\://')
+
+        basename="${NAME}_PORT_${container_port}"
+        quarry env:writenode $STACK $basename $host $public_port $global
+
+      done
+    fi
+    ;;
+
+  # generate the docker run options for a node
+  # volumes and ports
+  deploy:port_opts)
+    STACK="$2";
+    NODE="$3";
+    DEV="$4";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    NODE_DIR="$STACK_DIR/build/$NODE";
+
+    opts=""
+
+    # PORTS
+    if [[ -f "$NODE_DIR/expose" ]]; then
+      ports=`cat $NODE_DIR/expose`
+      for port in "${ports[@]}"
+      do
+        if [[ ! -z $DEV ]]; then
+          if [[ $port =~ : ]]; then
+            port="$port"
+          else
+            port="$port:$port"
+          fi
+        fi
+        opts="$opts -p $port"
+      done
+    fi
+
+    echo $opts
+    ;;
+
+  deploy:volume_opts)
+    STACK="$2";
+    NODE="$3";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    VOLUME_DIR="$QUARRY_ROOT/volumes/$STACK/$NODE"
+    NODE_DIR="$STACK_DIR/build/$NODE";
+
+    opts=""
+
+    # VOLUMES
+    if [[ -f "$NODE_DIR/volumes" ]]; then
+      volumes=`cat $NODE_DIR/volumes`
+      for volume in "${volumes[@]}"
+      do
+        hostvolume="$VOLUME_DIR$volume";
+        mkdir -p $hostvolume
+        #echo "volume: $hostvolume:$volume"
+        opts="$opts -v $hostvolume:$volume"
+      done
+    fi
+
+    echo $opts
+    ;;
+
+  stack:kill)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build";
+
+    pluginhook pre-kill $STACK
+
+    # loop over the services and build them
+    for servicefolder in $BUILD_DIR/service/* ; do
+      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
+
+      id=$(quarry db:service:get $STACK $servicename id)
+      
+      if [[ ! -z $id ]]; then
+        docker kill $id
+      fi
+    done
+
+    quarry stack:kill:workers $STACK
+    ;;
+
+  stack:kill:workers)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    BUILD_DIR="$STACK_DIR/build";
+
+    pluginhook pre-kill $STACK
+
+    # loop over the workers and build them
+    for workerfolder in $BUILD_DIR/worker/* ; do
+      workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+      NODE="$STACK$workername"
+
+      id=$(quarry db:worker:get $STACK $workername id)
+      domains=$(quarry db:worker:get $STACK $workername domains)
+      
+      if [[ ! -z $id ]]; then
+        docker kill $id
+      fi
+
+      if [[ ! -z $domains ]]; then
+        nginx-vhost remove $NODE
+      fi
+
+    done
+
+    nginx-vhost apply
+    ;;
+
+  stack:remove)
+    STACK="$2";
+    STACK_DIR="$QUARRY_ROOT/$STACK";
+    quarry deploy:kill $STACK
+
+    rm -rf $STACK_DIR/env/*
+    rm -f $STACK_DIR/src.tar
+    rm -rf $STACK_DIR/src
+    rm -rf $STACK_DIR/db
+    ;;
+
+  # get the services booted, bring the workers down and stop nginx and export NODE_ENV
+  developer)
+    STACK="$2"
+    if [[ -z $STACK ]]; then
+      echo "usage: quarry env <stackname>";
+      exit 1;
+    fi
+    quarry stack:kill:workers $STACK
+    quarry deploy:services $STACK
+    export NODE_ENV=development
+    echo "------------------------";
+    echo "you need to:";
+    echo
+    echo "sudo service nginx stop"
+    echo "sudo \`quarry env:cmd $STACK\` <your test command>"
+    echo
+    ;;
+
+  # start nginx and export NODE_ENV
+  production)
+    export NODE_ENV=production
+    sudo service nginx start
+    ;;
+
   plugins)
     ls -1 -d $PLUGIN_PATH/*/
     ;;
