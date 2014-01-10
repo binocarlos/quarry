@@ -11,8 +11,7 @@ fi
 
 apt-get update
 apt-get install -y git make curl software-properties-common
-# this is for annoying locale issue on new DO servers
-locale-gen en_US
+
 
 [[ `lsb_release -sr` == "12.04" ]] && apt-get install -y python-software-properties
 

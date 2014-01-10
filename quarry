@@ -2,7 +2,6 @@
 set -eo pipefail
 DOCKERIP=$(ifconfig docker0 | grep "inet addr" | sed 's/inet addr://' | awk '{ print $1 }' || "127.0.0.1")
 export QUARRY_ROOT=${QUARRY_ROOT:="/home/quarry"}
-export QUARRY_DATA_ROOT=${QUARRY_DATA_ROOT:="/var/lib/quarry/data"}
 export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/quarry/plugins"}
 export QUARRY_HOST=${QUARRY_HOST:=$DOCKERIP}
 export QUARRY_MASTER=${QUARRY_MASTER:=$QUARRY_HOST}
@@ -305,7 +304,11 @@ case "$1" in
     NAME="$3";
     ENV_DIR="$QUARRY_ROOT/$STACK/env";
     mkdir -p $ENV_DIR
-    cat $ENV_DIR/$NAME
+    if [[ -f $ENV_DIR/$NAME ]]; then
+      cat $ENV_DIR/$NAME
+    else
+      quarry env:global:get $NAME
+    fi
     ;;
 
   # get the docker command to boot the node
@@ -323,7 +326,9 @@ case "$1" in
 
     ENV_DIR="$QUARRY_ROOT/env";
     mkdir -p $ENV_DIR
-    cat $ENV_DIR/$NAME
+    if [[ -f $ENV_DIR/$NAME ]]; then
+      cat $ENV_DIR/$NAME
+    fi
     ;;
 
 
@@ -435,10 +440,12 @@ case "$1" in
 
     quarry db:snapshot $STACK
 
+
+
     pluginhook pre-deploy $STACK
 
     counter=$(quarry db:counter:inc $STACK)
-    
+
     quarry deploy:services $STACK
     quarry deploy:workers $STACK $counter
 
@@ -462,12 +469,14 @@ case "$1" in
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build";
 
-    # loop over the services and build them
-    for servicefolder in $BUILD_DIR/service/* ; do
-      servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
-      
-      quarry deploy:service $STACK $servicename $DEV
-    done
+    if [[ -d $BUILD_DIR/service ]]; then
+      # loop over the services and build them
+      for servicefolder in $BUILD_DIR/service/* ; do
+        servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
+        
+        quarry deploy:service $STACK $servicename $DEV
+      done
+    fi
 
     ;;
 
@@ -478,12 +487,14 @@ case "$1" in
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build";
 
-    # loop over the workers and build them
-    for workerfolder in $BUILD_DIR/worker/* ; do
-      workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
-      
-      quarry deploy:worker $STACK $workername "$STACK-$workername-$counter"
-    done
+    if [[ -d $BUILD_DIR/worker ]]; then
+      # loop over the workers and build them
+      for workerfolder in $BUILD_DIR/worker/* ; do
+        workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
+        
+        quarry deploy:worker $STACK $workername "$STACK-$workername-$counter"
+      done
+    fi
 
     ;;
 
@@ -518,7 +529,7 @@ case "$1" in
     NODE="$STACK$WORKER"
 
     echo
-    echo "deploy $STACK $WORKER"
+    echo "deploy worker $STACK $WORKER"
 
     # boot the docker container for the worker
     if [[ -f $BUILD_DIR/container ]]; then
@@ -558,11 +569,13 @@ case "$1" in
       # this is a static node
       if [[ -f $BUILD_DIR/document_root ]]; then
         root=`cat $BUILD_DIR/document_root`
+        echo "---------------------------------------"
         echo "    document_root $root"
         nginx-vhost document_root $NODE $STACK_DIR/src/$root
       else
         host=$QUARRY_HOST
         port=$(docker port $cid 80 | sed 's/^.*\://' || echo)
+        echo "---------------------------------------"
         echo "    backends $NODE $host:$port"
         nginx-vhost backends $NODE $host:$port
       fi
@@ -579,7 +592,7 @@ case "$1" in
     DEV="$4";
 
     echo
-    echo "deploy $STACK $SERVICE $DEV"
+    echo "deploy service $STACK $SERVICE $DEV"
 
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build/service/$SERVICE";
@@ -592,8 +605,6 @@ case "$1" in
 
     should_boot=""
     service_exists="yes"
-
-
 
     # this means the service is not running
     if [[ -z $running ]]; then
@@ -812,13 +823,76 @@ case "$1" in
   stack:remove)
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
-    quarry deploy:kill $STACK
+    quarry stack:kill $STACK
 
     rm -rf $STACK_DIR/env/*
     rm -f $STACK_DIR/src.tar
     rm -rf $STACK_DIR/src
+    rm -rf $STACK_DIR/build
     rm -rf $STACK_DIR/db
     ;;
+
+  cli)
+    STACK="$2";
+    IMAGE="$3";
+
+    if [[ -z $IMAGE ]]; then
+      echo "usage: quarry stack:bash <stack> <image> <cmd>"
+    fi
+
+    shift
+    shift
+    shift
+    cmd=$*
+    env=$(quarry env:docker $STACK)
+    docker run -i -t $env --entrypoint="/bin/bash" $IMAGE $cmd
+    ;;
+
+  mongo:cli)
+    STACK="$2";
+    host=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_ADDR)
+    port=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_PORT)
+    docker run -i -t --entrypoint="/usr/bin/mongo" quarry/mongo --host $host --port $port
+    ;;
+
+  mongo:export)
+    STACK="$2";
+    FOLDER="$3";
+    host=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_ADDR)
+    port=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_PORT)
+    mkdir -p $FOLDER
+    docker run -i -t -v $FOLDER:/backup --entrypoint="/usr/bin/mongodump" quarry/mongo --host $host --port $port --out /backup
+    ;;
+
+  mongo:import)
+    STACK="$2";
+    FOLDER="$3";
+    host=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_ADDR)
+    port=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_PORT)
+    docker run -i -t -v $FOLDER:/backup --entrypoint="/usr/bin/mongorestore" quarry/mongo --host $host --port $port /backup
+    ;;
+
+  redis:cli)
+    STACK="$2";
+    docker run -i -t -rm -link $STACK-service-redis:redis relateiq/redis-cli
+    ;;
+
+  redis:export)
+    STACK="$2";
+    FILE="$3";
+    VOLUME_DIR="$QUARRY_ROOT/volumes/$STACK/service/redis/data/db"
+    cat $VOLUME_DIR/dump.rdb | docker run -i quarry/rdb-parser > $FILE
+    ;;
+
+  redis:import)
+    STACK="$2";
+    FILE="$3";
+    host=$(quarry env:stack:get $STACK REDIS_PORT_6379_TCP_ADDR)
+    port=$(quarry env:stack:get $STACK REDIS_PORT_6379_TCP_PORT)
+    (cat $FILE; sleep 10) | nc $host $port > /dev/null
+    ;;
+
+    
 
   # get the services booted, bring the workers down and stop nginx and export NODE_ENV
   developer)
@@ -858,6 +932,17 @@ case "$1" in
     help                                         Print the list of commands
     plugins                                      Print active plugins
     plugins-install                              Install active plugins
+    developer <stack>                            Expose service ports onto 127.0.0.1
+    production <stack>                           Expose service ports onto 127.0.0.1
+    stack:kill <stack>                           Kill a stack
+    stack:remove <stack>                         Kill and remove a stack
+    cli <stack> <image> <cmd>                    Run a command with $stack env in image
+    mongo:cli <stack>                            Connect to the mongo service for a stack
+    mongo:export <stack> <folder>                Export the mongo database for a stack to a folder
+    mongo:import <stack> <folder>                Import the mongo database for a stack from a folder
+    redis:cli <stack>                            Connect to the redis service for a stack
+    redis:export <stack> <file>                  Export the redis database for a stack to a folder
+    redis:import <stack> <file>                  Import the redis database for a stack from a folder
 EOF
     echo
     ;;
@@ -869,3 +954,4 @@ EOF
     ;;
 
 esac
+

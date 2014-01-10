@@ -112,10 +112,6 @@ Builder.prototype.build_node = function(folder, node){
   }
 
   if(node.domains){
-    if(typeof(node.domains)==='string' && fs.existsSync(path.normalize(self.options.dir + '/' + node.domains))){
-      var domaintxt = fs.readFileSync(path.normalize(self.options.dir + '/' + node.domains), 'utf8');
-      node.domains = domaintxt.split("\n");
-    }
     if(!node.expose){
       node.expose = [];
     }
@@ -143,7 +139,7 @@ Builder.prototype.build_node = function(folder, node){
   }
 
   if(node.document_root){
-    fs.writeFileSync(folder + '/document_root', node.document_root, 'utf8');   
+    fs.writeFileSync(folder + '/document_root', node.document_root.replace(/^\.\//, ''), 'utf8');   
   }
 
   if(node.container){
