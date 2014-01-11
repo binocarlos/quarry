@@ -9,7 +9,7 @@ export QUARRY_MASTER=${QUARRY_MASTER:=$QUARRY_HOST}
 
 [[ $QUARRY_TRACE ]] && set -x
 
-if [[ $(id -un) != "quarry" && $1 != "plugins-install" ]]; then
+if [[ $(id -un) != "quarry" ]]; then
   sudo -u quarry -H $0 "$@"
   exit
 fi
@@ -360,7 +360,6 @@ case "$1" in
   build:folder)
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
-    pluginhook pre-build $STACK
 
     echo "build $STACK"
     echo "dir $STACK_DIR"
@@ -390,7 +389,6 @@ case "$1" in
       quarry build:node $STACK $workerfolder
       
     done
-    pluginhook post-build $STACK
     ;;
 
   build:node)
@@ -439,10 +437,6 @@ case "$1" in
 
     quarry db:snapshot $STACK
 
-
-
-    pluginhook pre-deploy $STACK
-
     counter=$(quarry db:counter:inc $STACK)
 
     quarry deploy:services $STACK
@@ -453,8 +447,6 @@ case "$1" in
     nginx-vhost apply
 
     quarry deploy:cleanup $STACK
-
-    pluginhook post-deploy $STACK
 
     echo
     echo "$STACK deployed"
@@ -775,8 +767,6 @@ case "$1" in
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build";
 
-    pluginhook pre-kill $STACK
-
     # loop over the services and build them
     for servicefolder in $BUILD_DIR/service/* ; do
       servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')
@@ -795,8 +785,6 @@ case "$1" in
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build";
-
-    pluginhook pre-kill $STACK
 
     # loop over the workers and build them
     for workerfolder in $BUILD_DIR/worker/* ; do
