@@ -885,7 +885,7 @@ case "$1" in
   developer)
     STACK="$2"
     if [[ -z $STACK ]]; then
-      echo "usage: quarry env <stackname>";
+      echo "usage: quarry developer <stackname>";
       exit 1;
     fi
     quarry stack:kill:workers $STACK
