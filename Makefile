@@ -1,29 +1,22 @@
 QUARRY_VERSION = master
 QUARRY_ROOT ?= /home/quarry
-
 SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
-PLUGINHOOK_URL ?= https://s3.amazonaws.com/progrium-pluginhook/pluginhook_0.1.0_amd64.deb
 NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
 
-.PHONY: all install copyfiles version plugins pluginhook dependencies sshcommand gitreceive docker aufs network test quarry-base
+.PHONY: all install copyfiles version dependencies sshcommand gitreceive docker aufs network test quarry-base
 
 all:
 	# Type "make install" to install.
 
 thing:
 	
-install: dependencies copyfiles plugins core version
+install: dependencies copyfiles core version
 
 copyfiles:
 	cp quarry /usr/local/bin/quarry || true
-	mkdir -p /var/lib/quarry/plugins
-	cp -r plugins/* /var/lib/quarry/plugins
 
 version:
 	git describe --tags > ${QUARRY_ROOT}/VERSION  2> /dev/null || echo '~${QUARRY_VERSION} ($(shell date -uIminutes))' > ${QUARRY_ROOT}/VERSION
-
-plugins: pluginhook docker
-	quarry plugins-install
 
 core: quarry-base
 
@@ -36,10 +29,6 @@ sshcommand:
 	wget -qO /usr/local/bin/sshcommand ${SSHCOMMAND_URL}
 	chmod +x /usr/local/bin/sshcommand
 	sshcommand create quarry /usr/local/bin/quarry
-
-pluginhook:
-	wget -qO /tmp/pluginhook_0.1.0_amd64.deb ${PLUGINHOOK_URL}
-	dpkg -i /tmp/pluginhook_0.1.0_amd64.deb
 
 docker: aufs
 	egrep -i "^docker" /etc/group || groupadd docker

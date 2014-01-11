@@ -2,7 +2,6 @@
 set -eo pipefail
 DOCKERIP=$(ifconfig docker0 | grep "inet addr" | sed 's/inet addr://' | awk '{ print $1 }' || "127.0.0.1")
 export QUARRY_ROOT=${QUARRY_ROOT:="/home/quarry"}
-export PLUGIN_PATH=${PLUGIN_PATH:="/var/lib/quarry/plugins"}
 export QUARRY_HOST=${QUARRY_HOST:=$DOCKERIP}
 export QUARRY_MASTER=${QUARRY_MASTER:=$QUARRY_HOST}
 
@@ -918,20 +917,42 @@ case "$1" in
     sudo service nginx start
     ;;
 
-  plugins)
-    ls -1 -d $PLUGIN_PATH/*/
+  git-hook)
+    APP=$2
+    while read oldrev newrev refname
+    do
+      # Only run this script for the master branch. You can remove this
+      # if block if you wish to run it for others as well.
+      if [[ $refname = "refs/heads/master" ]] ; then
+        git archive $newrev | quarry receive $APP | sed -u "s/^/"$'\e[1G'"/"
+      fi
+
+    done
     ;;
 
-  plugins-install)
-    pluginhook install
+  git-*)
+    APP="$(echo $2 | perl -pe 's/(?<!\\)'\''//g' | sed 's/\\'\''/'\''/g')"
+    APP_PATH=$QUARRY_ROOT/$APP
+
+    if [[ $1 == "git-receive-pack" && ! -d $APP_PATH ]]; then
+        git init --bare $APP_PATH > /dev/null
+        PRERECEIVE_HOOK="$APP_PATH/hooks/pre-receive"
+        cat > $PRERECEIVE_HOOK <<EOF
+#!/usr/bin/env bash
+set -e; set -o pipefail;
+cat | QUARRY_ROOT="$QUARRY_ROOT" quarry git-hook $APP
+EOF
+        chmod +x $PRERECEIVE_HOOK
+    fi
+
+    args=$@
+    git-shell -c "$args"
     ;;
 
   help)
     echo
-    cat<<EOF | pluginhook commands help | sort
+    cat<<EOF | sort
     help                                         Print the list of commands
-    plugins                                      Print active plugins
-    plugins-install                              Install active plugins
     developer <stack>                            Expose service ports onto 127.0.0.1
     production <stack>                           Expose service ports onto 127.0.0.1
     stack:kill <stack>                           Kill a stack
@@ -948,9 +969,7 @@ EOF
     ;;
 
   *)
-    for script in $(ls -d /var/lib/quarry/plugins/*/commands); do
-      $script "$@"
-    done
+    quarry help
     ;;
 
 esac
