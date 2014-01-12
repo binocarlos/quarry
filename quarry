@@ -866,17 +866,15 @@ case "$1" in
 
   redis:export)
     STACK="$2";
-    FILE="$3";
     VOLUME_DIR="$QUARRY_ROOT/volumes/$STACK/service/redis/data/db"
-    cat $VOLUME_DIR/dump.rdb | docker run -i quarry/rdb-parser > $FILE
+    cat $VOLUME_DIR/dump.rdb | docker run -i quarry/rdb-parser
     ;;
 
   redis:import)
     STACK="$2";
-    FILE="$3";
     host=$(quarry env:stack:get $STACK REDIS_PORT_6379_TCP_ADDR)
     port=$(quarry env:stack:get $STACK REDIS_PORT_6379_TCP_PORT)
-    (cat $FILE; sleep 10) | nc $host $port > /dev/null
+    (cat; sleep 10) | nc $host $port > /dev/null
     ;;
 
     
