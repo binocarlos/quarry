@@ -2,6 +2,7 @@ QUARRY_VERSION = master
 QUARRY_ROOT ?= /home/quarry
 SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
 NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
+YODA_URL ?= https://raw.github.com/binocarlos/yoda/master/bootstrap.sh
 
 .PHONY: all install copyfiles version dependencies sshcommand gitreceive docker aufs network test quarry-base
 
@@ -46,6 +47,9 @@ nginx-vhost:
 	wget -qO- ${NGINXVHOST_URL} | sudo bash
 	sleep 1
 	nginx-vhost useradd quarry
+
+yoda:
+	wget -qO- ${YODA_URL} | sudo bash
 
 # enable ipv4 forwarding
 network:

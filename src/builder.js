@@ -142,18 +142,31 @@ Builder.prototype.build_node = function(folder, node){
     fs.writeFileSync(folder + '/document_root', node.document_root.replace(/^\.\//, ''), 'utf8');   
   }
 
-  if(node.container){
-    fs.writeFileSync(folder + '/container', node.container, 'utf8');  
+  var reserved = {
+    run:true,
+    install:true,
+    volumes:true,
+    expose:true,
+    domains:true,
+    document_root:true
   }
 
-  if(node.global){
-    fs.writeFileSync(folder + '/global', node.global, 'utf8');  
-  }
+  Object.keys(node || {}).forEach(function(prop){
+    if(reserved[prop]){
+      return;
+    }
 
-  fs.writeFileSync(folder + '/node.json', JSON.stringify(node), 'utf8');
+    var val = node[prop];
 
-  
-  
+    if(typeof(val)==='string'){
+      val = [val];
+    }
+    val = val.join("\n");
+
+    fs.writeFileSync(folder + '/' + prop, val, 'utf8');
+  })
+
+  fs.writeFileSync(folder + '/node.json', JSON.stringify(node), 'utf8');  
 }
 
 Builder.prototype.build = function(folder, done){

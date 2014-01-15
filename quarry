@@ -330,6 +330,18 @@ case "$1" in
     fi
     ;;
 
+  env:inject)
+    STACK="$2"
+    FILE="$3"
+
+    while read LINE
+    do
+      VAR=$(echo $LINE | sed 's/=.*/ /')
+      VAL=$(echo $LINE | sed 's/.*=/ /')
+      quarry env:stack:set $STACK $VAR $VAL
+    done < $FILE
+    ;;
+
 
 
   #
@@ -500,9 +512,27 @@ case "$1" in
       for workerfolder in $DB_DIR/previous/* ; do
         workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
         if [[ -f $workerfolder/id ]]; then
-          previouscontainer=`cat $workerfolder/id`
-          echo "kill $workername $previouscontainer"
-          id=$(docker kill $previouscontainer || true)
+          id=`cat $workerfolder/id`
+          echo "kill $workername $id"
+          docker kill $id || true
+          if [[ -f "$workerfolder/unhook" ]]; then
+            unhook=`cat $BUILD_DIR/unhook`
+
+            echo "---------------------------"
+            echo "UNHOOK"
+            echo "$unhook"
+
+            # PORTS
+            if [[ -f "$BUILD_DIR/expose" ]]; then
+              ports=`cat $BUILD_DIR/expose`
+              for expose in "${ports[@]}"
+              do
+                echo "RUN UNHOOK"
+                echo "$unhook"
+                #eval $unhook
+              done
+            fi
+          fi
         fi
       done
     fi
@@ -517,6 +547,21 @@ case "$1" in
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build/worker/$WORKER";
 
+    args=""
+    if [[ -f $BUILD_DIR/args ]]; then
+      args=$(cat $BUILD_DIR/args)
+    fi
+
+    hook=""
+    if [[ -f $BUILD_DIR/hook ]]; then
+      hook=$(cat $BUILD_DIR/hook)
+    fi
+
+    unhook=""
+    if [[ -f $BUILD_DIR/unhook ]]; then
+      unhook=$(cat $BUILD_DIR/unhook)
+    fi
+
     NODE="$STACK$WORKER"
 
     echo
@@ -530,10 +575,10 @@ case "$1" in
       volume_opts=$(quarry deploy:volume_opts $STACK worker/$WORKER);
       env=$(quarry env:docker $STACK)
 
-      # BOOT SERVICE HERE
-      cid=$(docker run -d -t --name $NAME $port_opts $volume_opts $env $container)
+      # BOOT WORKER HERE
+      cid=$(docker run -d -t --name $NAME $port_opts $volume_opts $env $container $args)
 
-      echo "docker run -d -t --name $NAME $port_opts $volume_opts $env $container"
+      echo "docker run -d -t --name $NAME $port_opts $volume_opts $env $container $args"
       echo $cid
 
       # write the container
@@ -564,8 +609,8 @@ case "$1" in
         echo "    document_root $root"
         nginx-vhost document_root $NODE $STACK_DIR/src/$root
       else
-        host=$QUARRY_HOST
-        port=$(docker port $cid 80 | sed 's/^.*\://' || echo)
+        host=$(quarry deploy:worker:gethost $STACK $WORKER)
+        port=$(quarry deploy:worker:getport $STACK $WORKER 80)
         echo "---------------------------------------"
         echo "    backends $NODE $host:$port"
         nginx-vhost backends $NODE $host:$port
@@ -573,8 +618,48 @@ case "$1" in
 
     fi
 
-    echo
+    # hook up the nginx-vhost with the domains
+    if [[ -f $BUILD_DIR/hook ]]; then
 
+      hook=`cat $BUILD_DIR/hook`
+
+      echo "---------------------------"
+      echo "HOOK"
+      echo "$hook"
+
+      # PORTS
+      if [[ -f "$BUILD_DIR/expose" ]]; then
+        ports=`cat $BUILD_DIR/expose`
+        for expose in "${ports[@]}"
+        do
+          cid=$(quarry db:worker:get $STACK $WORKER id)
+          host=$(quarry deploy:worker:gethost $STACK $WORKER)
+          port=$(quarry deploy:worker:getport $STACK $WORKER $expose)
+          echo "RUN HOOK"
+          echo "$hook"
+          #eval $hook
+        done
+      fi
+
+
+    fi
+
+    echo
+    ;;
+
+  deploy:worker:getport)
+    STACK="$2"
+    WORKER="$3"
+    PORT="$4"
+    cid=$(quarry db:worker:get $STACK $WORKER id)
+    port=$(docker port $cid $PORT | sed 's/^.*\://' || echo)
+    echo $port
+    ;;
+
+  deploy:worker:gethost)
+    STACK="$2"
+    WORKER="$3"
+    echo $QUARRY_HOST 
     ;;
 
   deploy:service)
@@ -589,7 +674,16 @@ case "$1" in
     BUILD_DIR="$STACK_DIR/build/service/$SERVICE";
 
     nodename="$STACK-service-$SERVICE"
-    container=$(cat $BUILD_DIR/container)
+
+    container=""
+    if [[ -f $BUILD_DIR/container ]]; then
+      container=$(cat $BUILD_DIR/container)
+    fi
+
+    args=""
+    if [[ -f $BUILD_DIR/args ]]; then
+      args=$(cat $BUILD_DIR/args)
+    fi
 
     running=$(docker ps | grep "$nodename" | awk '{ print $1 }' || echo)
     cid=$(quarry db:service:get $STACK $SERVICE id)
@@ -650,14 +744,18 @@ case "$1" in
 
     if [[ ! -z $should_boot ]]; then
 
-      docker rm $nodename || true
+      if [[ ! -z $running ]]; then
+        docker rm $nodename
+      fi
 
       # BOOT SERVICE HERE
+
       port_opts=$(quarry deploy:port_opts $STACK service/$SERVICE $DEV);
       volume_opts=$(quarry deploy:volume_opts $STACK service/$SERVICE);
-      cid=$(docker run -d -t -name $nodename $port_opts $volume_opts $container)
 
-      echo "PORT: $port_opts"
+      echo "docker run -d -t -name $nodename $port_opts $volume_opts $container $args"
+      
+      cid=$(docker run -d -t -name $nodename $port_opts $volume_opts $container $args)
 
       # write the container
       quarry db:service:set $STACK $SERVICE id $cid
@@ -693,7 +791,7 @@ case "$1" in
 
     # PORTS
     if [[ -f "$BUILD_DIR/expose" ]]; then
-      ports=`cat $BUILD_DIR/expose`
+      ports=(`cat $BUILD_DIR/expose`)
 
       for port in "${ports[@]}"
       do
@@ -721,15 +819,13 @@ case "$1" in
 
     # PORTS
     if [[ -f "$NODE_DIR/expose" ]]; then
-      ports=`cat $NODE_DIR/expose`
+      ports=(`cat $NODE_DIR/expose`)
       for port in "${ports[@]}"
       do
-        if [[ ! -z $DEV ]]; then
-          if [[ $port =~ : ]]; then
-            port="$port"
-          else
-            port="$port:$port"
-          fi
+        if [[ $port =~ : ]]; then
+          port="$QUARRY_HOST:$port"
+        else
+          port="$QUARRY_HOST::$port"
         fi
         opts="$opts -p $port"
       done
@@ -749,7 +845,7 @@ case "$1" in
 
     # VOLUMES
     if [[ -f "$NODE_DIR/volumes" ]]; then
-      volumes=`cat $NODE_DIR/volumes`
+      volumes=(`cat $NODE_DIR/volumes`)
       for volume in "${volumes[@]}"
       do
         hostvolume="$VOLUME_DIR$volume";
@@ -775,6 +871,7 @@ case "$1" in
       
       if [[ ! -z $id ]]; then
         docker kill $id
+        docker rm $id
       fi
     done
 
@@ -796,6 +893,7 @@ case "$1" in
       
       if [[ ! -z $id ]]; then
         docker kill $id
+        docker rm $id
       fi
 
       if [[ ! -z $domains ]]; then
@@ -824,7 +922,7 @@ case "$1" in
     IMAGE="$3";
 
     if [[ -z $IMAGE ]]; then
-      echo "usage: quarry stack:bash <stack> <image> <cmd>"
+      echo "usage: quarry cli <stack> <image> <cmd>"
     fi
 
     shift
@@ -845,18 +943,18 @@ case "$1" in
   mongo:export)
     STACK="$2";
     FOLDER="$3";
-    host=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_ADDR)
-    port=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_PORT)
-    mkdir -p $FOLDER
-    docker run -i -t -v $FOLDER:/backup --entrypoint="/usr/bin/mongodump" quarry/mongo --host $host --port $port --out /backup
+    #host=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_ADDR)
+    #port=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_PORT)
+    #mkdir -p $FOLDER
+    #docker run -i -t -v $FOLDER:/backup --entrypoint="/usr/bin/mongodump" quarry/mongo --host $host --port $port --out /backup
     ;;
 
   mongo:import)
     STACK="$2";
     FOLDER="$3";
-    host=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_ADDR)
-    port=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_PORT)
-    docker run -i -t -v $FOLDER:/backup --entrypoint="/usr/bin/mongorestore" quarry/mongo --host $host --port $port /backup
+    #host=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_ADDR)
+    #port=$(quarry env:stack:get $STACK MONGO_PORT_27017_TCP_PORT)
+    #docker run -i -t -v $FOLDER:/backup --entrypoint="/usr/bin/mongorestore" quarry/mongo --host $host --port $port /backup
     ;;
 
   redis:cli)
@@ -867,18 +965,40 @@ case "$1" in
   redis:export)
     STACK="$2";
     FILE="$3";
-    VOLUME_DIR="$QUARRY_ROOT/volumes/$STACK/service/redis/data/db"
-    cat $VOLUME_DIR/dump.rdb | docker run -i quarry/rdb-parser > $FILE
+    #VOLUME_DIR="$QUARRY_ROOT/volumes/$STACK/service/redis/data/db"
+    #cat $VOLUME_DIR/dump.rdb | docker run -i quarry/rdb-parser > $FILE
     ;;
 
   redis:import)
     STACK="$2";
     FILE="$3";
-    host=$(quarry env:stack:get $STACK REDIS_PORT_6379_TCP_ADDR)
-    port=$(quarry env:stack:get $STACK REDIS_PORT_6379_TCP_PORT)
-    (cat $FILE; sleep 10) | nc $host $port > /dev/null
+    #host=$(quarry env:stack:get $STACK REDIS_PORT_6379_TCP_ADDR)
+    #port=$(quarry env:stack:get $STACK REDIS_PORT_6379_TCP_PORT)
+    #(cat $FILE; sleep 10) | nc $host $port > /dev/null
     ;;
 
+  etcd:cli)
+
+    ;;
+
+  etcd:export)
+
+    ;;
+
+  etcd:import)
+
+    ;;
+
+
+  yoda)
+    STACK="$2";
+    shift
+    shift
+    cmd=$*
+    YODA_HOST=`quarry env:stack:get $STACK ETCD_PORT_4001_TCP_ADDR` \
+    YODA_PORT=`quarry env:stack:get $STACK ETCD_PORT_4001_TCP_PORT` \
+    yoda $cmd
+    ;;
     
 
   # get the services booted, bring the workers down and stop nginx and export NODE_ENV
@@ -888,15 +1008,13 @@ case "$1" in
       echo "usage: quarry developer <stackname>";
       exit 1;
     fi
+    shift
+    shift
+    cmd=$*
     quarry stack:kill:workers $STACK
     quarry deploy:services $STACK
     export NODE_ENV=development
-    echo "------------------------";
-    echo "you need to:";
-    echo
-    echo "sudo service nginx stop"
-    echo "sudo \`quarry env:cmd $STACK\` <your test command>"
-    echo
+    echo '`quarry env:cmd '$STACK'`'" $cmd"
     ;;
 
   # start nginx and export NODE_ENV
@@ -952,6 +1070,9 @@ EOF
     redis:cli <stack>                            Connect to the redis service for a stack
     redis:export <stack> <file>                  Export the redis database for a stack to a folder
     redis:import <stack> <file>                  Import the redis database for a stack from a folder
+    etcd:cli <stack>                             Connect to the etcd service for a stack
+    etcd:export <stack> <file>                   Export the etcd database for a stack to a folder
+    etcd:import <stack> <file>                   Import the etcd database for a stack from a folder
 EOF
     echo
     ;;
@@ -961,4 +1082,3 @@ EOF
     ;;
 
 esac
-
