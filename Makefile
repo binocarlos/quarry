@@ -14,7 +14,7 @@ thing:
 install: dependencies copyfiles core version
 
 copyfiles:
-	cp quarry /usr/local/bin/quarry || true
+	cp -f quarry /usr/local/bin/quarry || true
 
 version:
 	git describe --tags > ${QUARRY_ROOT}/VERSION  2> /dev/null || echo '~${QUARRY_VERSION} ($(shell date -uIminutes))' > ${QUARRY_ROOT}/VERSION

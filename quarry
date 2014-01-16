@@ -730,6 +730,7 @@ case "$1" in
       if [ "$globalsetting" == "yes" ]; then
         global="yes"
       else
+        echo "checking global $globalsetting"
         # check if the global container is running for us
         globalrunning=$(docker ps | grep "$globalsetting" | awk '{ print $1 }' || echo)
 
