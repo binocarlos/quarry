@@ -637,7 +637,7 @@ case "$1" in
           port=$(quarry deploy:worker:getport $STACK $WORKER $expose)
           echo "RUN HOOK"
           echo "$hook"
-          #eval $hook
+          eval $hook
         done
       fi
 
