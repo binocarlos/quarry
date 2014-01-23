@@ -73,7 +73,8 @@ Builder.prototype.build_node = function(folder, node){
 
     var Dockerfile = [
       'FROM ' + (node.container || 'quarry/node'),
-      'ADD . /srv/quarryapp'
+      'ADD . /srv/quarryapp',
+      'WORKDIR /srv/quarryapp'
     ]
 
     if(typeof(node.install)==='string'){
@@ -86,7 +87,7 @@ Builder.prototype.build_node = function(folder, node){
 
     Dockerfile.push(installer);
     
-    Dockerfile.push("ENTRYPOINT cd /srv/quarryapp && " + node.run);
+    Dockerfile.push("ENTRYPOINT " + node.run);
     Dockerfile = Dockerfile.join("\n");
 
     fs.writeFileSync(folder + '/build/Dockerfile', Dockerfile, 'utf8');
@@ -101,10 +102,11 @@ Builder.prototype.build_node = function(folder, node){
 
     var Dockerfile = [
       'FROM ' + (node.container || 'quarry/node'),
-      'ADD . /srv/quarryapp'
+      'ADD . /srv/quarryapp',
+      'WORKDIR /srv/quarryapp'
     ]
     
-    Dockerfile.push("ENTRYPOINT cd /srv/quarryapp && " + node.run);
+    Dockerfile.push("ENTRYPOINT " + node.run);
     Dockerfile = Dockerfile.join("\n");
 
     fs.writeFileSync(folder + '/build/Dockerfile', Dockerfile, 'utf8');

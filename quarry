@@ -529,7 +529,7 @@ case "$1" in
               do
                 echo "RUN UNHOOK"
                 echo "$unhook"
-                #eval $unhook
+                eval $unhook
               done
             fi
           fi
@@ -893,8 +893,8 @@ case "$1" in
       domains=$(quarry db:worker:get $STACK $workername domains)
       
       if [[ ! -z $id ]]; then
-        docker kill $id
-        docker rm $id
+        docker kill $id || true
+        docker rm $id || true
       fi
 
       if [[ ! -z $domains ]]; then
@@ -1015,7 +1015,8 @@ case "$1" in
     quarry stack:kill:workers $STACK
     quarry deploy:services $STACK
     export NODE_ENV=development
-    echo '`quarry env:cmd '$STACK'`'" $cmd"
+    
+    echo "sudo \`quarry env:cmd $STACK\` $cmd"
     ;;
 
   # start nginx and export NODE_ENV
