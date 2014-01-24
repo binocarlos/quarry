@@ -234,6 +234,30 @@ This means any requests for either 'abc.com' or 'efg.com' will end up at this no
 
 If a worker has a 'document_root' setting it means that the node is a static website and nginx will just serve the files from it.
 
+## commands
+
+Once a stack is running remotely - you can run commands from your local machine:
+
+```
+$ ssh -t quarry@hostname command
+```
+
+### mongo:cli stackname
+
+connect to the remote mongo server for a stack
+
+```
+$ ssh -t quarry@domain.com mongo:cli mystack
+```
+
+### redis:cli stackname
+
+connect to the remote mongo server for a stack
+
+```
+$ ssh -t quarry@domain.com mongo:cli mystack
+```
+
 ## licence
 
 MIT
