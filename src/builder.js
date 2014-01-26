@@ -62,58 +62,7 @@ Builder.prototype.build_node = function(folder, node){
   var self = this;
   var id = self.options.id + "/" + node.name;
 
-  if(fs.existsSync(path.normalize(self.options.dir + '/' + node.container + '/Dockerfile'))){
-    var node_src_folder = path.normalize(self.options.dir + '/' + node.container);
-
-    wrench.copyDirSyncRecursive(node_src_folder, folder + '/build');
-    node.container = id;
-  }
-  else if(node.install){
-    wrench.copyDirSyncRecursive(self.options.dir, folder + '/build');
-
-    var Dockerfile = [
-      'FROM ' + (node.container || 'quarry/node'),
-      'ADD . /srv/quarryapp',
-      'WORKDIR /srv/quarryapp'
-    ]
-
-    if(typeof(node.install)==='string'){
-      node.install = [node.install];
-    }
-
-    var installer = node.install.map(function(cmd){
-      return 'RUN cd /srv/quarryapp && ' + cmd;
-    }).join("\n")
-
-    Dockerfile.push(installer);
-    
-    Dockerfile.push("ENTRYPOINT " + node.run);
-    Dockerfile = Dockerfile.join("\n");
-
-    fs.writeFileSync(folder + '/build/Dockerfile', Dockerfile, 'utf8');
-    node.container = id;
-  }
-  else if(node.run){
-    wrench.copyDirSyncRecursive(self.options.dir, folder + '/build');
-
-    if(typeof(node.run)!=='string'){
-      node.run = node.run.join(' && ');
-    }
-
-    var Dockerfile = [
-      'FROM ' + (node.container || 'quarry/node'),
-      'ADD . /srv/quarryapp',
-      'WORKDIR /srv/quarryapp'
-    ]
-    
-    Dockerfile.push("ENTRYPOINT " + node.run);
-    Dockerfile = Dockerfile.join("\n");
-
-    fs.writeFileSync(folder + '/build/Dockerfile', Dockerfile, 'utf8');
-    node.container = id;
-  }
-
-  if(node.domains){
+  if(node.domains && node.domains.length>0){
     if(!node.expose){
       node.expose = [];
     }
@@ -123,49 +72,32 @@ Builder.prototype.build_node = function(folder, node){
     if(existing.length<=0){
       node.expose.push(80);
     }
-    fs.writeFileSync(folder + '/domains', node.domains.join(" "), 'utf8');  
+    if(typeof(node.domains)==='string'){
+      node.domains = [node.domains];
+    }
+    node.domains = node.domains.join(" ");
   }
 
   if(node.expose && node.expose.length>0){
     if(typeof(node.expose)==='string'){
       node.expose = [node.expose];
     }
-    fs.writeFileSync(folder + '/expose', node.expose.join(" "), 'utf8');  
+    node.expose = node.expose.join(" ");
   }
 
   if(node.volumes && node.volumes.length>0){
     if(typeof(node.volumes)==='string'){
       node.volumes = [node.volumes];
     }
-    fs.writeFileSync(folder + '/volumes', node.volumes.join(" "), 'utf8');  
+    node.volumes = node.volumes.join(" ");
   }
 
   if(node.document_root){
-    fs.writeFileSync(folder + '/document_root', node.document_root.replace(/^\.\//, ''), 'utf8');   
-  }
-
-  var reserved = {
-    run:true,
-    install:true,
-    volumes:true,
-    expose:true,
-    domains:true,
-    document_root:true
+    node.document_root = node.document_root.replace(/^\.\//, '');
   }
 
   Object.keys(node || {}).forEach(function(prop){
-    if(reserved[prop]){
-      return;
-    }
-
-    var val = node[prop];
-
-    if(typeof(val)==='string'){
-      val = [val];
-    }
-    val = val.join("\n");
-
-    fs.writeFileSync(folder + '/' + prop, val, 'utf8');
+    fs.writeFileSync(folder + '/' + prop, node[prop], 'utf8');
   })
 
   fs.writeFileSync(folder + '/node.json', JSON.stringify(node), 'utf8');  

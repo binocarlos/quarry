@@ -52,15 +52,13 @@ case "$1" in
     STACK="$2";
     STACK_DIR="$QUARRY_ROOT/$STACK";
 
-
     # reset the build folders
     rm -rf $STACK_DIR/buildtemp && mkdir -p $STACK_DIR/buildtemp
     rm -rf $STACK_DIR/build
     rm -rf $STACK_DIR/src && mkdir -p $STACK_DIR/src
 
     # incoming tar stream -> /home/quarry/appname/src.tar
-    cat > $STACK_DIR/src.tar
-    cat $STACK_DIR/src.tar | tar -xC $STACK_DIR/src
+    cat | tar -xC $STACK_DIR/src
 
     echo "build $STACK"
     echo "dir $STACK_DIR"
@@ -80,8 +78,15 @@ case "$1" in
     for servicefolder in $STACK_DIR/build/service/* ; do
       servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')      
 
-      echo "quarry build:node $STACK $servicefolder"
-      quarry build:node $STACK $servicefolder
+      if [[ -f $servicefolder/dockerfile ]]; then
+        imagename=$STACK/$servicename
+        cp -f $servicefolder/dockerfile $STACK_DIR/src/Dockerfile
+        echo "build service: $servicename"
+        cd $STACK_DIR/src && docker build -t $imagename .
+        echo $imagename > $servicefolder/container  
+      fi
+
+      
 
     done
 
@@ -89,42 +94,18 @@ case "$1" in
     for workerfolder in $STACK_DIR/build/worker/* ; do
       workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
 
-      echo "quarry build:node $STACK $workerfolder"
-      quarry build:node $STACK $workerfolder
-      
+      if [[ -f $workerfolder/dockerfile ]]; then
+        imagename=$STACK/$workername
+        cp -f $workerfolder/dockerfile $STACK_DIR/src/Dockerfile
+        echo "build worker: $workername"
+        cd $STACK_DIR/src && docker build -t $imagename .
+        echo $imagename > $workerfolder/container
+      fi
+
     done
     rm -f $STACK_DIR/src.tar
     rm -rf $STACK_DIR/src
     ;;
-
-  build:node)
-    STACK="$2"
-    NODEFOLDER="$3";
-    # build the service container
-    if [[ -f "$NODEFOLDER/build/Dockerfile" ]]; then
-      # we build the docker file into a local image
-      containername=$(cat $NODEFOLDER/container)
-      reponame="$containername"
-      echo
-      echo
-      echo "building $reponame"
-      echo
-      echo
-      echo "docker build -t $reponame $NODEFOLDER/build"
-      docker build -t $reponame $NODEFOLDER/build
-      #
-      # NOTE - wait until we have multiple hosts
-      #
-      # now commit the image to the master registry
-      #echo "pushing $reponame"
-      #docker push $reponame 1>&2
-      # write the image name (which is pointing to the registry)
-      echo $reponame > $NODEFOLDER/container
-    fi
-    rm -rf $NODEFOLDER/build
-    ;;
-
-
 
   #
   #
