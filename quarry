@@ -74,6 +74,19 @@ case "$1" in
     docker run -i -v $STACK_DIR/buildtemp:/build quarry/base bash -c "rm -rf /build/*"
     rm -rf $STACK_DIR/buildtemp
 
+    # loop over the images and build them
+    for imagefolder in $STACK_DIR/build/image/* ; do
+      imagename=$(echo $imagefolder | awk -F/ '{print $(NF)}')      
+
+      if [[ -f $imagefolder/dockerfile ]]; then
+        imagename=$STACK/$imagename
+        cp -f $imagefolder/dockerfile $STACK_DIR/src/Dockerfile
+        echo "build image: $imagename"
+        cd $STACK_DIR/src && docker build -t $imagename .
+        echo $imagename > $imagefolder/container  
+      fi
+    done
+
     # loop over the services and build them
     for servicefolder in $STACK_DIR/build/service/* ; do
       servicename=$(echo $servicefolder | awk -F/ '{print $(NF)}')      
@@ -85,9 +98,6 @@ case "$1" in
         cd $STACK_DIR/src && docker build -t $imagename .
         echo $imagename > $servicefolder/container  
       fi
-
-      
-
     done
 
     # loop over the workers and build them
@@ -101,8 +111,8 @@ case "$1" in
         cd $STACK_DIR/src && docker build -t $imagename .
         echo $imagename > $workerfolder/container
       fi
-
     done
+    
     rm -f $STACK_DIR/src.tar
     rm -rf $STACK_DIR/src
     ;;

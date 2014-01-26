@@ -41,38 +41,82 @@ Workers are processes that restart on each push and usually make use of the code
 Here is an example stack that defines 2 services (Mongo + Redis) and 1 web application and 1 static website.
 
 ```yaml
-# a mongo database service
+# a mongo database
 mongo:
-	type: service
-	container: quarry/mongo
-	expose:
-		- 27017
+	# services stay running
+  type: service
+  # what docker image the service is based on
+  container: quarry/mongo
+  # keep data on the host
+  volumes:
+    - /data/db
+  # what ports the service exposes
+  expose:
+    - 27017
 
-# a redis database service
+# an etcd service
+etcd:
+  type: service
+  container: quarry/etcd
+  global: diggerhq-service-etcd
+  volumes:
+    - /data/db
+  args: -name diggerhq
+  expose:
+    - 4001
+    - 7001
+
 redis:
-	type: service
-	container: quarry/redis
-	expose:
-		- 6379
+  type: service
+  container: quarry/redis
+  volumes:
+    - /data/db
+  expose:
+    - 6379
 
-# an app running node.js code
-app:
-	type: worker
-	container: quarry/node
-	install:
-		- cd src/app && npm install
-	run: node src/app/index.js
-	domains:
-		- myapp.com
-		- *.myapp.com
+# an image is not a running process
+# it is used by workers
+baseapp:
+  type: image
+  # the dockerfile that creates the image
+  dockerfile: |
+    FROM quarry/monnode
+    ADD ./src/lib /srv/app/src/lib
+    ADD ./Makefile /srv/app/Makefile
+    RUN cd /srv/app/src/lib/stack && npm install
 
-# a static website
+# a worker is a long running process that restarts each time code is pushed
+digger:
+  type: worker
+  # the dockerfile for the worker
+  dockerfile: |
+    FROM quarry/monnode
+    ADD ./src/digger /srv/app
+    RUN cd /srv/app && npm install
+    WORKDIR /srv/app
+    ENTRYPOINT NODE_ENV=production mon "node ./index.js --port 8080"
+  # ports we will communicate to the worker on
+  expose:
+    - 8080
+  # how to announce ourselves to the network
+  hook: quarry yoda tracktube set /tracktube/digger/main $host:$port
+  unhook: quarry yoda tracktube del /tracktube/digger/main
+
+# this worker has a domains property so it will have HTTP traffic routed to it
 website:
-	type: worker
-	document_root: src/website/www
-	domains:
-		- mydomain.com
-		- *.mydomain.com
+  type: worker
+  dockerfile: |
+    FROM tracktube/baseapp
+    ADD ./src/website /srv/app/src/website
+    RUN cd /srv/app/src/website && npm install    
+    WORKDIR /srv/app
+    ENTRYPOINT NODE_ENV=production mon "node ./src/website/index.js --port 80"
+  # nginx will proxy requests for these domains
+  domains:
+    - "thetracktube.com"
+    - "www.thetracktube.com"
+    - "tracktube.local.digger.io"
+    - "tracktube.lan.digger.io"
 ```
 
 ## installation
@@ -128,60 +172,16 @@ nodename:
 
 The 'type' setting of each node decides how the rest of the config is interpreted.
 
+ * image - base images used by other parts of the stack
  * service - nodes that are started once and remain running (e.g. database servers)
  * worker - backend nodes that can expose TCP ports to other nodes and expose domains to the HTTP router
 
 For each, there are a few core settings:
 
  * container - what Docker image the node is based on
- * install - the command that installs the node's dependencies
- * run - the command that will execute the node
+ * dockerfile - the raw docker file to build the node
 
-Container defines what docker image the node will use.
-
-This is either a repository in the [Docker Index](https://index.docker.io/) or it is a path to a Dockerfile inside the repository.
-
-Here is a node that is running from a custom Docker container build:
-
-```yaml
-custom_nodejs_worker:
-	type: worker
-	container ./src/worker
-```
-
-and the contents of ./src/worker/Dockerfile
-
-```
-FROM quarry/node
-RUN apt-get install some-funky-dep
-RUN useradd some-funky-user-thing
-ADD . /srv/workerapp
-EXPOSE 8791
-ENTRYPOINT ["node", "/srv/workerapp/index.js"]
-```
-
-You can also define 'install' and 'run' steps in the quarry.yml.
-
-Here is a node that is running based on the quarry/node image from the index but with custom installation and run steps layered over (in a automated Dockerfile):
-
-```yaml
-nodejs_worker:
-  type: worker
-  container: quarry/node
-  install: cd src/worker && npm install
-  run: node src/worker/index.js
-```
-
-This will be translated into the following Dockerfile:
-
-```
-FROM quarry/node
-RUN cd /srv/app/src/worker && npm install
-RUN useradd some-funky-user-thing
-ENTRYPOINT node /srv/app/src/worker/index.js
-```
-
-Notice how the paths have been translated - it is important that you keep paths relative in your quarry.yml
+Each docker file is built in the root of the app so you can include code as you want.
 
 The [Dockerfile Reference](http://docs.docker.io/en/latest/use/builder) is a good place to learn about Dockerfile commands.
 

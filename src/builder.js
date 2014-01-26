@@ -41,6 +41,7 @@ function Builder(options){
   }
 
   this.nodes = {
+    image:[],
     service:[],
     worker:[]
   };
@@ -106,6 +107,12 @@ Builder.prototype.build_node = function(folder, node){
 Builder.prototype.build = function(folder, done){
   var self = this;
 
+  this.nodes.image.forEach(function(image){
+    var image_root = folder + '/image/' + image.name;
+    wrench.mkdirSyncRecursive(image_root);
+    self.build_node(image_root, image);
+  })
+  
   this.nodes.service.forEach(function(service){
     var service_root = folder + '/service/' + service.name;
     wrench.mkdirSyncRecursive(service_root);
