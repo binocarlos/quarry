@@ -121,6 +121,7 @@ end
 Vagrant::VERSION >= "1.1.0" and Vagrant.configure("2") do |config|
   config.vm.network :private_network, ip: "192.168.8.120"
   config.vm.network :forwarded_port, guest: 80, host: 8080
+  config.vm.network :forwarded_port, guest: 443, host: 443
   config.vm.synced_folder "../", "/srv/projects"
   
   config.vm.provider :aws do |aws, override|
