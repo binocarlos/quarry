@@ -861,14 +861,12 @@ case "$1" in
 
   env:inject)
     STACK="$2"
-    FILE="$3"
-
     while read LINE
     do
       VAR=$(echo $LINE | sed 's/=.*/ /')
       VAL=$(echo $LINE | sed 's/.*=/ /')
       quarry env:stack:set $STACK $VAR $VAL
-    done < $FILE
+    done
     ;;
 
   #
