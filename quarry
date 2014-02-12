@@ -111,6 +111,16 @@ case "$1" in
         cd $STACK_DIR/src && docker build -t $imagename .
         echo $imagename > $workerfolder/container
       fi
+
+      if [[ -f $workerfolder/ssl_cert ]]; then
+        cert=`cat $workerfolder/ssl_cert`
+        cp $STACK_DIR/src/$cert $workerfolder/ssl_cert
+      fi
+
+      if [[ -f $workerfolder/ssl_key ]]; then
+        key=`cat $workerfolder/ssl_key`
+        cp $STACK_DIR/src/$key $workerfolder/ssl_key
+      fi
     done
     
     rm -f $STACK_DIR/src.tar
@@ -130,6 +140,8 @@ case "$1" in
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build";
 
+    mkdir -p $STACK_DIR/env
+
     echo "deploy $STACK"
 
     quarry db:snapshot $STACK
@@ -139,10 +151,9 @@ case "$1" in
     quarry deploy:services $STACK
     quarry deploy:workers $STACK $counter
 
-
     sleep 2
-    nginx-vhost apply
 
+    nginx-vhost apply
     quarry deploy:cleanup $STACK
 
     echo
@@ -192,7 +203,7 @@ case "$1" in
     DB_DIR="$QUARRY_ROOT/$STACK/db"
 
     echo "cleanup $STACK"
-
+    
     if [[ -d "$DB_DIR/previous" ]]; then
       for workerfolder in $DB_DIR/previous/* ; do
         workername=$(echo $workerfolder | awk -F/ '{print $(NF)}')
@@ -220,6 +231,7 @@ case "$1" in
           fi
         fi
       done
+      rm -rf $DB_DIR/previous
     fi
     
     ;;
@@ -260,11 +272,13 @@ case "$1" in
       volume_opts=$(quarry deploy:volume_opts $STACK worker/$WORKER);
       env=$(quarry env:docker $STACK)
 
-      # BOOT WORKER HERE
-      cid=$(docker run -d -t --name $NAME $port_opts $volume_opts $env $container $args)
+      echo "running app container"
 
       echo "docker run -d -t --name $NAME $port_opts $volume_opts $env $container $args"
       echo $cid
+
+      # BOOT WORKER HERE
+      cid=$(docker run -d -t --name $NAME $port_opts $volume_opts $env $container $args)
 
       # write the container
       quarry db:worker:set $STACK $WORKER id $cid
@@ -301,6 +315,13 @@ case "$1" in
         nginx-vhost backends $NODE $host:$port
       fi
 
+      if [[ -f $BUILD_DIR/ssl_cert ]]; then
+        nginx-vhost ssl_cert $NODE $BUILD_DIR/ssl_cert
+      fi
+
+      if [[ -f $BUILD_DIR/ssl_key ]]; then
+        nginx-vhost ssl_key $NODE $BUILD_DIR/ssl_key
+      fi
     fi
 
     # hook up the nginx-vhost with the domains
@@ -421,6 +442,7 @@ case "$1" in
 
         # if it is then don't boot this service
         if [[ ! -z $globalrunning ]]; then
+          echo "global service is running"
           should_boot=""
           service_exists=""
         fi
