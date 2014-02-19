@@ -839,6 +839,13 @@ case "$1" in
     fi
     ;;
 
+  # remove a stack env dir
+  env:stack:reset)
+    STACK="$2";
+    ENV_DIR="$QUARRY_ROOT/$STACK/env";
+    rm -rf $ENV_DIR
+    ;;
+
   # get the docker command to boot the node
   env:global:set)
     NAME="$2";
@@ -848,6 +855,8 @@ case "$1" in
     mkdir -p $ENV_DIR
     echo $VALUE > $ENV_DIR/$NAME
     ;;
+
+
 
   env:global:get)
     NAME="$2";
