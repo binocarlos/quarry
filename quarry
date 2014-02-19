@@ -870,6 +870,12 @@ case "$1" in
 
   env:inject)
     STACK="$2"
+    RESET="$3"
+
+    if [[ ! -z $RESET ]]; then
+      quarry env:stack:reset $STACK
+    fi
+
     while read LINE
     do
       VAR=$(echo $LINE | sed 's/=.*/ /')
