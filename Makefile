@@ -3,20 +3,24 @@ QUARRY_ROOT ?= /home/quarry
 SSHCOMMAND_URL ?= https://raw.github.com/progrium/sshcommand/master/sshcommand
 NGINXVHOST_URL ?= https://raw.github.com/binocarlos/nginx-vhost/master/bootstrap.sh
 YODA_URL ?= https://raw.github.com/binocarlos/yoda/master/bootstrap.sh
+ETCD_VERSION ?= 0.3.0
 
-.PHONY: all install copyfiles dependencies sshcommand gitreceive docker aufs network test quarry-base
+.PHONY: all install copyfiles dependencies sshcommand gitreceive docker aufs network test quarry-base boot core
 
 all:
 	# Type "make install" to install.
 
 thing:
 	
-install: dependencies copyfiles core
+install: dependencies copyfiles core boot
 
 copyfiles:
 	cp -f quarry /usr/local/bin/quarry || true
 
 core: quarry-base
+
+boot: core
+	quarry etcd:run
 
 quarry-base:
 	docker build -t quarry/base .
@@ -46,8 +50,19 @@ nginx-vhost:
 	nginx-vhost useradd quarry
 	nginx-vhost useradd vagrant
 
-yoda:
+yoda: etcd
 	wget -qO- ${YODA_URL} | sudo bash
+
+nodejs:
+	wget -qO /usr/local/bin/nave https://raw.github.com/isaacs/nave/master/nave.sh
+	chmod a+x /usr/local/bin/nave
+	nave usemain 0.10.24
+
+#fleet:
+#	wget -qO /tmp/fleet https://github.com/coreos/fleet/releases/download/v0.1.3/fleet-v0.1.3-linux-amd64.tar.gz	
+#
+
+#, "-addr", "0.0.0.0:4001", "-peer-addr", "0.0.0.0:7001", "-data-dir", "/data/db", "-snapshotCount", "100", "-snapshot"
 
 # enable ipv4 forwarding
 network:

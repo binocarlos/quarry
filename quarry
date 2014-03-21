@@ -38,8 +38,6 @@ case "$1" in
     docker images | grep '<none>' |  awk '{print $3}'  | xargs docker rmi &> /dev/null &
     ;;
 
-
-
   #
   #
   #
@@ -490,6 +488,7 @@ case "$1" in
     global="$4";
     NAME=$(echo $SERVICE | sed 's/^.*\///' | awk '{print toupper($0)}')
 
+    echo "write env: $SERVICE";
     STACK_DIR="$QUARRY_ROOT/$STACK";
     BUILD_DIR="$STACK_DIR/build/service/$SERVICE";
 
@@ -505,8 +504,8 @@ case "$1" in
       do
       
         container_port=$(echo $port | sed 's/^.*\://')
-        public_port=$(docker port $cid $container_port | sed 's/^.*\://')
 
+        public_port=$(docker port $cid $container_port | sed 's/^.*\://')
         basename="${NAME}_PORT_${container_port}"
         quarry env:writenode $STACK $basename $host $public_port $global
 
@@ -1023,6 +1022,9 @@ case "$1" in
 
     ;;
 
+  etcd:start)
+
+    ;;
 
   yoda)
     STACK="$2";
@@ -1032,6 +1034,11 @@ case "$1" in
     YODA_HOST=`quarry env:stack:get $STACK ETCD_PORT_4001_TCP_ADDR` \
     YODA_PORT=`quarry env:stack:get $STACK ETCD_PORT_4001_TCP_PORT` \
     yoda $cmd
+    ;;
+
+  update)
+    docker pull coreos/etcd
+    docker pull quarry/monnode
     ;;
     
 
@@ -1105,9 +1112,6 @@ EOF
     redis:cli <stack>                            Connect to the redis service for a stack
     redis:export <stack> <file>                  Export the redis database for a stack to a folder
     redis:import <stack> <file>                  Import the redis database for a stack from a folder
-    etcd:cli <stack>                             Connect to the etcd service for a stack
-    etcd:export <stack> <file>                   Export the etcd database for a stack to a folder
-    etcd:import <stack> <file>                   Import the etcd database for a stack from a folder
 EOF
     echo
     ;;
